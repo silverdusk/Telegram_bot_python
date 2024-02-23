@@ -15,9 +15,17 @@ logging.basicConfig(filename='log.log', level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.info("Starting bot successfully at: " + str(datetime.datetime.utcnow()) + " UTC")
 
+if load_dotenv():
+    logging.info(".env file loaded successfully")
+    print(".env file loaded successfully")
+else:
+    logging.error("Error loading .env file")
+    print("Error loading .env file")
+
 # BOT_TOKEN = os.environ.get('BOT_TOKEN')
 BOT_TOKEN = os.getenv('BOT_TOKEN', )
 bot = telebot.TeleBot(os.getenv('BOT_TOKEN'))
+AUTHORIZED_IDS = set(map(int, os.getenv('AUTHORIZED_IDS', '').split(',')))
 
 DB_NAME = os.getenv('DB_NAME')
 DB_USER = os.getenv('DB_USER')
@@ -27,18 +35,21 @@ DB_PORT = os.getenv('DB_PORT')
 DB_TABLE_NAME = os.getenv('DB_TABLE_NAME')
 
 ALLOWED_TYPES = ['spare part', 'miscellaneous']
-
-if load_dotenv():
-    logging.info(".env file loaded successfully")
-    print(".env file loaded successfully")
-else:
-    logging.error("Error loading .env file")
-    print("Error loading .env file")
+SKIP_WORKING_HOURS = os.getenv("SKIP_WORKING_HOURS", False)
 
 
 def is_int(string):
     try:
         int(string)
+        return True
+    except ValueError:
+        logging.error("Incorrect input value for int conversion: %s", string)
+        return False
+
+
+def is_float(string):
+    try:
+        float(string)
         return True
     except ValueError:
         return False
@@ -70,8 +81,8 @@ def send_demo_message(message):
 def send_welcome(message):
     logging.info("Received '/start' command")
     keyboard = telebot.types.ReplyKeyboardMarkup()
-    keyboard.add(telebot.types.KeyboardButton('Send'))
     keyboard.add(telebot.types.KeyboardButton('Get'))
+    keyboard.add(telebot.types.KeyboardButton('Add'))
     keyboard.add(telebot.types.KeyboardButton('Admin'))
     keyboard.add(telebot.types.KeyboardButton('Send dummy message'))
     keyboard.add(telebot.types.KeyboardButton('Change availability status'))
@@ -83,11 +94,12 @@ def send_welcome(message):
 @bot.message_handler(commands=['menu'])
 def menu(message):
     keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.add(telebot.types.InlineKeyboardButton('Send', callback_data='Send'))
     keyboard.add(telebot.types.InlineKeyboardButton('Get', callback_data='Get'))
+    keyboard.add(telebot.types.InlineKeyboardButton('Add', callback_data='Add'))
     keyboard.add(telebot.types.InlineKeyboardButton('Admin', callback_data='Admin'))
     keyboard.add(telebot.types.InlineKeyboardButton('Change availability status', callback_data='availability_status'))
-    keyboard.add(telebot.types.InlineKeyboardButton('Send dummy message', callback_data='Send dummy message'))
+    keyboard.add(telebot.types.InlineKeyboardButton('Send test message', callback_data='Send test message'))
+    keyboard.add(telebot.types.InlineKeyboardButton('Stop', callback_data='stop_bot'))
     bot.send_message(message.chat.id, 'What you want to do?', reply_markup=keyboard)
 
 
@@ -96,35 +108,40 @@ def admin(message):
     bug(message)
 
 
-@bot.message_handler(regexp='^send$')
-def sell(message):
+@bot.message_handler(regexp='^get$')
+def get(message):
     bug(message)
 
 
-@bot.message_handler(regexp='^get')
-def buy(message):
+@bot.message_handler(regexp='^add$')
+def add(message):
     add_item(message)
 
 
-@bot.message_handler(regexp='^Send test message')
-def buy(message):
+@bot.message_handler(regexp='^Send test message$')
+def test(message):
     send_demo_message(message)
 
 
-@bot.message_handler(regexp='^Change availability status')
+@bot.message_handler(regexp='^Change availability status$')
 def availability_status(message):
     update_availability_status(message)
 
 
+@bot.message_handler(regexp='^stop_bot$')
+def stop(message):
+    stop_bot(message)
+
+
 @bot.callback_query_handler(func=lambda c: True)
 def submenus(c):
-    if c.data == 'Send':
+    if c.data == 'Add':
         add_item(c.message)
     elif c.data == 'Get':
         bug(c.message)
     elif c.data == 'Admin':
         bug(c.message)
-    elif c.data == 'Send dummy message':
+    elif c.data == 'Send test message':
         send_demo_message(c.message)
 
 
@@ -154,7 +171,7 @@ def check_item_name(message, order):
     # message.text - value of user input
     # send request to check availability of item
     # for now it will be always true
-    result = re.search(r"^[A-Za-z0-9]{255}$", message.text)
+    result = re.search(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]{1,255}$", message.text)
     if result:
         order.item_name = message.text
         msg = bot.send_message(message.chat.id, 'Please provide amount of items:',
@@ -169,7 +186,7 @@ def check_item_name(message, order):
 
 
 def check_availability_name(message):
-    result = re.search(r"^[A-Za-z0-9]{255}$", message.text)
+    result = re.search(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]{1,255}$", message.text)
     if result:
         name = message.text.upper()
         print('name', name)
@@ -219,7 +236,7 @@ def check_item_amount(message, request):
     # message.text - value of user input
     if is_int(message.text):
         request.item_amount = message.text
-        msg = bot.send_message(message.chat.id, 'Please provide request type:', reply_markup=telebot.types.ForceReply())
+        msg = bot.send_message(message.chat.id, 'Please provide item type:', reply_markup=telebot.types.ForceReply())
         bot.register_next_step_handler(msg, check_item_type, request)
     else:
         msg = bot.send_message(message.chat.id,
@@ -247,11 +264,10 @@ def check_item_type(message, request):
 
 
 def check_item_price_value(message, request):
-    if is_int(message.text):
+    if is_float(message.text):
         request.item_price = message.text
-        request_cut_loses(message, request)
         msg = bot.send_message(message.chat.id,
-                               f'{message.text} is invalid.\n'
+                               f'price {message.text} is correct.\n'
                                f'Please provide availability status:',
                                reply_markup=telebot.types.ForceReply())
         bot.register_next_step_handler(msg, check_availability_status, request)
@@ -266,13 +282,14 @@ def check_item_price_value(message, request):
 def check_availability_status(message, request):
     if message.text == 'yes':
         request.availability = True
+        validate_request(message, request)
     elif message.text == 'no':
         request.availability = False
+        validate_request(message, request)
     elif message.text:
         msg = bot.send_message(message.chat.id,
                                f'Incorrect value, must be yes/no')
         bot.register_next_step_handler(msg, check_availability_status, request)
-    validate_request(message, request)
 
 
 def validate_request(message, request):
@@ -460,18 +477,25 @@ def check_working_hours():
 
 
 # Define a signal handler to stop the bot gracefully
-def stop_bot(signal, frame):
+@bot.message_handler(commands=['stop'])
+def stop_bot(message):
+    if message.chat.id not in AUTHORIZED_IDS:
+        logging.warning(f"Unauthorized attempt to stop bot from chat {message.chat.id}")
+        return
     logging.info("Stopping bot...")
     print("Stopping bot...")
+    bot.reply_to(message, "Stopping bot...")
+
     bot.stop_polling()
+
     logging.info("Bot stopped at: " + str(datetime.datetime.utcnow()) + " UTC")
     print("Bot stopped.")
     exit(0)
 
 
 # Register the signal handler for SIGINT and SIGTERM
-signal.signal(signal.SIGINT, stop_bot)
-signal.signal(signal.SIGTERM, stop_bot)
+# signal.signal(signal.SIGINT, stop_bot)
+# signal.signal(signal.SIGTERM, stop_bot)
 
 # Start the bot's polling loop
 bot.polling()
