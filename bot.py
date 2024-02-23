@@ -9,6 +9,7 @@ from psycopg2 import OperationalError
 import signal
 import re
 import logging
+import database
 
 logging.basicConfig(filename='log.log', level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
