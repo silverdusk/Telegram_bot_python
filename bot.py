@@ -1,5 +1,5 @@
 import os
-
+from dotenv import load_dotenv
 import datetime
 import pytz
 import telebot
@@ -8,23 +8,30 @@ import psycopg2
 from psycopg2 import OperationalError
 import signal
 import re
-from dotenv import load_dotenv
 import logging
 
-logging.basicConfig(filename='log.log', level=logging.INFO)
-logging.info("Starting notifier service at " + str(datetime.datetime.utcnow()))
+logging.basicConfig(filename='log.log', level=logging.DEBUG,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.info("Starting bot successfully at: " + str(datetime.datetime.utcnow()) + " UTC")
 
-load_dotenv()
+if load_dotenv():
+    logging.info(".env file loaded successfully")
+    print(".env file loaded successfully")
+else:
+    logging.error("Error loading .env file")
+    print("Error loading .env file")
 
 # BOT_TOKEN = os.environ.get('BOT_TOKEN')
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-ALLOWED_TYPES = ['spare part', 'miscellaneous']
-bot = telebot.TeleBot(BOT_TOKEN)
+BOT_TOKEN = os.getenv('BOT_TOKEN', )
+bot = telebot.TeleBot(os.getenv('BOT_TOKEN'))
+
 DB_NAME = os.getenv('DB_NAME')
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_HOST = os.getenv('DB_HOST')
 DB_PORT = os.getenv('DB_PORT')
+DB_TABLE_NAME = os.getenv('DB_TABLE_NAME')
+ALLOWED_TYPES = ['spare part', 'miscellaneous']
 
 
 def create_connection():
@@ -37,8 +44,10 @@ def create_connection():
             host=DB_HOST,
             port=DB_PORT
         )
+        logging.info("Connected to the database")
         print("Connected to the database")
     except psycopg2.Error as e:
+        logging.error(f"Database connection error: {e}")
         print(f"Error: {e}")
     return conn
 
@@ -47,7 +56,7 @@ def insert_data_into_postgres(conn, message, request):
     cursor = conn.cursor()
     try:
         # Construct the SQL INSERT query
-        sql_query = """INSERT INTO your_table_name (item_name, item_amount, item_type, item_price, 
+        sql_query = f"""INSERT INTO {DB_NAME}.{DB_TABLE_NAME} (item_name, item_amount, item_type, item_price, 
                                                                             availability, chat_id) 
                        VALUES (%s, %s, %s, %s, %s, %s)"""
 
@@ -58,8 +67,10 @@ def insert_data_into_postgres(conn, message, request):
 
         # Commit the transaction
         conn.commit()
+        logging.info("Data inserted into Postgres database")
         print("Data inserted into Postgres database")
     except psycopg2.Error as e:
+        logging.error(f"Error inserting data into Postgres database: {e}")
         print(f"Error inserting data into Postgres database: {e}")
         conn.rollback()
     finally:
@@ -71,9 +82,9 @@ def update_availability_in_database(conn, item, availability):
     cursor = conn.cursor()
     try:
         # Construct the SQL UPDATE query
-        sql_query = """UPDATE your_table_name 
-                       SET availability = %s 
-                       WHERE item = %s"""
+        sql_query = f"""UPDATE {DB_NAME}.{DB_TABLE_NAME} 
+                                SET availability = %s 
+                                WHERE item = %s"""
 
         # Execute the SQL query to update availability status
         cursor.execute(sql_query, (availability, item))
@@ -121,6 +132,7 @@ def send_demo_message(message):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    logging.info("Received '/start' command")
     keyboard = telebot.types.ReplyKeyboardMarkup()
     keyboard.add(telebot.types.KeyboardButton('Send'))
     keyboard.add(telebot.types.KeyboardButton('Get'))
@@ -513,8 +525,10 @@ def check_working_hours():
 
 # Define a signal handler to stop the bot gracefully
 def stop_bot(signal, frame):
+    logging.info("Stopping bot...")
     print("Stopping bot...")
     bot.stop_polling()
+    logging.info("Bot stopped at: " + str(datetime.datetime.utcnow()) + " UTC")
     print("Bot stopped.")
     exit(0)
 
