@@ -3,13 +3,13 @@ from dotenv import load_dotenv
 import datetime
 import pytz
 import telebot
-import json
 import psycopg2
 from psycopg2 import OperationalError
-import signal
 import re
 import logging
 import database
+import validators
+
 
 logging.basicConfig(filename='log.log', level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -23,7 +23,6 @@ else:
     print("Error loading .env file")
 
 # BOT_TOKEN = os.environ.get('BOT_TOKEN')
-BOT_TOKEN = os.getenv('BOT_TOKEN', )
 bot = telebot.TeleBot(os.getenv('BOT_TOKEN'))
 AUTHORIZED_IDS = set(map(int, os.getenv('AUTHORIZED_IDS', '').split(',')))
 
@@ -36,24 +35,6 @@ DB_TABLE_NAME = os.getenv('DB_TABLE_NAME')
 
 ALLOWED_TYPES = ['spare part', 'miscellaneous']
 SKIP_WORKING_HOURS = os.getenv("SKIP_WORKING_HOURS", False)
-max_len_str = 255
-
-
-def is_int(string):
-    try:
-        int(string)
-        return True
-    except ValueError:
-        logging.error("Incorrect input value for int conversion: %s", string)
-        return False
-
-
-def is_float(string):
-    try:
-        float(string)
-        return True
-    except ValueError:
-        return False
 
 
 class UserInput:
@@ -168,17 +149,11 @@ def add_item(message):
                                           'again later.')
 
 
-def text_input_validator(message):
-    result = re.search(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]"
-                       r"{1," + str(max_len_str) + "}$", message.text)
-    return result
-
-
 def check_item_name(message, order):
     # message.text - value of user input
     # send request to check availability of item
     # for now it will be always true
-    result = text_input_validator(message)
+    result = validators.text_input_validator(message)
     if result:
         order.item_name = message.text
         msg = bot.send_message(message.chat.id, 'Please provide amount of items:',
@@ -193,7 +168,7 @@ def check_item_name(message, order):
 
 
 def check_availability_name(message):
-    result = text_input_validator(message)
+    result = validators.text_input_validator(message)
     if result:
         name = message.text.upper()
         print('name', name)
@@ -241,7 +216,7 @@ def check_availability_item(message, item):
 
 def check_item_amount(message, request):
     # message.text - value of user input
-    if is_int(message.text):
+    if validators.is_int(message.text):
         request.item_amount = message.text
         msg = bot.send_message(message.chat.id, 'Please provide item type:', reply_markup=telebot.types.ForceReply())
         bot.register_next_step_handler(msg, check_item_type, request)
@@ -273,7 +248,7 @@ def check_item_type(message, request):
 
 
 def check_item_price_value(message, request):
-    if is_float(message.text):
+    if validators.is_float(message.text):
         request.item_price = message.text
         msg = bot.send_message(message.chat.id,
                                f'price {message.text} is correct.\n'
@@ -412,7 +387,7 @@ def edit_items_value(message, request, items_type):
 
 def update_items_value(message, request, items_type):
     if items_type == 'name':
-        result = text_input_validator(message)
+        result = validators.text_input_validator(message)
         if result:
             request.item_name = message.text.upper()
         else:
@@ -422,7 +397,7 @@ def update_items_value(message, request, items_type):
                                    reply_markup=telebot.types.ForceReply())
             bot.register_next_step_handler(msg, update_items_value, request, 'name')
     elif items_type == 'amount':
-        if is_int(message.text):
+        if validators.is_int(message.text):
             request.item_amount = message.text
         else:
             msg = bot.send_message(message.chat.id,
@@ -441,7 +416,7 @@ def update_items_value(message, request, items_type):
         else:
             request.item_type = message.text.lower()
     elif items_type == 'item_price':
-        if is_int(message.text):
+        if validators.is_int(message.text):
             request.item_price = message.text
         else:
             msg = bot.send_message(message.chat.id,
