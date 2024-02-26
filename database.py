@@ -44,7 +44,7 @@ def insert_data_into_postgres(conn, message, request):
     cursor = conn.cursor()
     try:
         # Construct the SQL INSERT query
-        sql_query = f"""INSERT INTO {DB_NAME}.{DB_TABLE_NAME} (item_name, item_amount, item_type, item_price, 
+        sql_query = f"""INSERT INTO {DB_TABLE_NAME} (item_name, item_amount, item_type, item_price, 
                                                                             availability, chat_id) 
                        VALUES (%s, %s, %s, %s, %s, %s)"""
 
