@@ -36,6 +36,7 @@ DB_TABLE_NAME = os.getenv('DB_TABLE_NAME')
 
 ALLOWED_TYPES = ['spare part', 'miscellaneous']
 SKIP_WORKING_HOURS = os.getenv("SKIP_WORKING_HOURS", False)
+max_len_str = 255
 
 
 def is_int(string):
@@ -167,11 +168,17 @@ def add_item(message):
                                           'again later.')
 
 
+def text_input_validator(message):
+    result = re.search(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]"
+                       r"{1," + str(max_len_str) + "}$", message.text)
+    return result
+
+
 def check_item_name(message, order):
     # message.text - value of user input
     # send request to check availability of item
     # for now it will be always true
-    result = re.search(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]{1,255}$", message.text)
+    result = text_input_validator(message)
     if result:
         order.item_name = message.text
         msg = bot.send_message(message.chat.id, 'Please provide amount of items:',
@@ -186,7 +193,7 @@ def check_item_name(message, order):
 
 
 def check_availability_name(message):
-    result = re.search(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]{1,255}$", message.text)
+    result = text_input_validator(message)
     if result:
         name = message.text.upper()
         print('name', name)
@@ -260,7 +267,9 @@ def check_item_type(message, request):
                                    reply_markup=telebot.types.ForceReply())
             bot.register_next_step_handler(msg, check_item_price_value, request)
         else:
-            request_cut_loses(message, request)
+            msg = bot.send_message(message.chat.id, 'Please provide item price value:',
+                                   reply_markup=telebot.types.ForceReply())
+            bot.register_next_step_handler(msg, check_item_price_value, request)
 
 
 def check_item_price_value(message, request):
@@ -403,7 +412,7 @@ def edit_items_value(message, request, items_type):
 
 def update_items_value(message, request, items_type):
     if items_type == 'name':
-        result = re.search(r"^[A-Za-z0-9]{255}$", message.text)
+        result = text_input_validator(message)
         if result:
             request.item_name = message.text.upper()
         else:
