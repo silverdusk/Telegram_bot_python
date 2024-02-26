@@ -84,7 +84,7 @@ def send_welcome(message):
     keyboard.add(telebot.types.KeyboardButton('Get'))
     keyboard.add(telebot.types.KeyboardButton('Add'))
     keyboard.add(telebot.types.KeyboardButton('Admin'))
-    keyboard.add(telebot.types.KeyboardButton('Send dummy message'))
+    keyboard.add(telebot.types.KeyboardButton('Send test message'))
     keyboard.add(telebot.types.KeyboardButton('Change availability status'))
     bot.send_message(message.chat.id,
                      "Hi! :)\nI'm organizer bot. I will help you to add your items.",

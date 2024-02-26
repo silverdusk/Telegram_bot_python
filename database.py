@@ -6,20 +6,20 @@ from psycopg2 import OperationalError
 from dotenv import load_dotenv
 
 
+if load_dotenv():
+    logging.info(".env file for DB loaded successfully")
+    print(".env file for DB loaded successfully")
+else:
+    logging.error("Error loading .env file for DB")
+    print("Error loading .env file for DB")
+
+
 DB_NAME = os.getenv('DB_NAME')
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_HOST = os.getenv('DB_HOST')
 DB_PORT = os.getenv('DB_PORT')
 DB_TABLE_NAME = os.getenv('DB_TABLE_NAME')
-
-
-if load_dotenv():
-    logging.info(".env file loaded successfully")
-    print(".env file loaded successfully")
-else:
-    logging.error("Error loading .env file")
-    print("Error loading .env file")
 
 
 def create_connection():
