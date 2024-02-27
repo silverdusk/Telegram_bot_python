@@ -1,25 +1,20 @@
 import os
-
+import json
 import logging
 import psycopg2
 from psycopg2 import OperationalError
-from dotenv import load_dotenv
 
 
-if load_dotenv():
-    logging.info(".env file for DB loaded successfully")
-    print(".env file for DB loaded successfully")
-else:
-    logging.error("Error loading .env file for DB")
-    print("Error loading .env file for DB")
+with open('config.json', 'r') as file:
+    config = json.load(file)
 
 
-DB_NAME = os.getenv('DB_NAME')
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-DB_HOST = os.getenv('DB_HOST')
-DB_PORT = os.getenv('DB_PORT')
-DB_TABLE_NAME = os.getenv('DB_TABLE_NAME')
+DB_NAME = config['database']['db_name']
+DB_USER = config['database']['user']
+DB_PASSWORD = config['database']['password']
+DB_HOST = config['database']['host']
+DB_PORT = config['database']['port']
+DB_TABLE_NAME = config['database']['table_name']
 
 
 def create_connection():

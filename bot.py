@@ -1,5 +1,4 @@
 import os
-from dotenv import load_dotenv
 import datetime
 import pytz
 import telebot
@@ -7,6 +6,7 @@ import psycopg2
 from psycopg2 import OperationalError
 import re
 import logging
+import json
 import database
 import validators
 
@@ -15,26 +15,13 @@ logging.basicConfig(filename='log.log', level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.info("Starting bot successfully at: " + str(datetime.datetime.utcnow()) + " UTC")
 
-if load_dotenv():
-    logging.info(".env file loaded successfully")
-    print(".env file loaded successfully")
-else:
-    logging.error("Error loading .env file")
-    print("Error loading .env file")
+with open('config.json', 'r') as file:
+    config = json.load(file)
 
 # BOT_TOKEN = os.environ.get('BOT_TOKEN')
-bot = telebot.TeleBot(os.getenv('BOT_TOKEN'))
-AUTHORIZED_IDS = set(map(int, os.getenv('AUTHORIZED_IDS', '').split(',')))
-
-DB_NAME = os.getenv('DB_NAME')
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-DB_HOST = os.getenv('DB_HOST')
-DB_PORT = os.getenv('DB_PORT')
-DB_TABLE_NAME = os.getenv('DB_TABLE_NAME')
-
-ALLOWED_TYPES = ['spare part', 'miscellaneous']
-SKIP_WORKING_HOURS = os.getenv("SKIP_WORKING_HOURS", False)
+bot = telebot.TeleBot(config['bot_token'])
+AUTHORIZED_IDS = config['authorized_ids']
+ALLOWED_TYPES = config['allowed_types']
 
 
 class UserInput:
@@ -140,7 +127,7 @@ def bug(message):
 
 
 def add_item(message):
-    if check_working_hours():
+    if validators.check_working_hours():
         msg = bot.send_message(message.chat.id, 'Please provide name of item:', reply_markup=telebot.types.ForceReply())
         order = UserInput()
         bot.register_next_step_handler(msg, check_item_name, order)
@@ -153,8 +140,7 @@ def check_item_name(message, order):
     # message.text - value of user input
     # send request to check availability of item
     # for now it will be always true
-    result = validators.text_input_validator(message)
-    if result:
+    if validators.text_input_validator(message):
         order.item_name = message.text
         msg = bot.send_message(message.chat.id, 'Please provide amount of items:',
                                reply_markup=telebot.types.ForceReply())
@@ -223,7 +209,7 @@ def check_item_amount(message, request):
     else:
         msg = bot.send_message(message.chat.id,
                                f'{message.text} is invalid.\n'
-                               f'Please provide purchase sum in $:',
+                               f'Please provide item amount:',
                                reply_markup=telebot.types.ForceReply())
         bot.register_next_step_handler(msg, check_item_amount, request)
 
@@ -441,23 +427,6 @@ def update_availability_status(message):
     msg = bot.send_message(message.chat.id, 'Please provide availability '
                                             'status:', reply_markup=telebot.types.ForceReply())
     bot.register_next_step_handler(msg, check_availability_name)
-
-
-def check_working_hours():
-    if SKIP_WORKING_HOURS == 'True':
-        return True
-    now = datetime.datetime.now(pytz.timezone('Europe/Lisbon'))
-    # now = datetime.datetime.now(pytz.timezone('Asia/Jerusalem'))
-    # now = datetime.datetime.now(pytz.timezone('America/New_York'))
-    if now.weekday() > 5:
-        return False
-    else:
-        if now.hour < 9 or now.hour > 19:
-            return False
-        elif now.hour == 9 and now.minute < 30:
-            return False
-        else:
-            return True
 
 
 # Define a signal handler to stop the bot gracefully

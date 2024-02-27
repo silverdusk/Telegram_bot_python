@@ -1,18 +1,23 @@
-import os
 import re
 import logging
-from dotenv import load_dotenv
+import json
 
 
-load_dotenv()
-min_len_str = os.getenv('MIN_LEN_STR')
-max_len_str = os.getenv('MAX_LEN_STR')
+with open('config.json', 'r') as file:
+    config = json.load(file)
+
+print(config)
 
 
 def text_input_validator(message):
-    result = re.search(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]"
-                       r"{" + str(min_len_str) + "," + str(max_len_str) + "}$", message.text)
-    return result
+    min_len = config['min_len_str']
+    max_len = config['max_len_str']
+
+    length_valid = min_len <= len(message.text) <= max_len
+    # pattern = r'^[A-Za-z0-9\s!"#$%&\'()*+,-.\/:;<=>?@\[\\\]^_`\}\{|~]{{{}, {}}}+$'.format(min_len, max_len)
+    character_valid = re.match(r"^[A-Za-z0-9\s!\"#$%&\'()*+,-./:;<=>?@\[\\\]^_`{|}~]+$", message.text) is not None
+    # result = re.search(pattern, message.text)
+    return length_valid and character_valid
 
 
 def is_int(string):
@@ -31,3 +36,20 @@ def is_float(string):
     except ValueError:
         logging.error("Incorrect input value for float conversion: %s", string)
         return False
+
+
+def check_working_hours():
+    if config['skip_working_hours'] == 'True':
+        return True
+    now = datetime.datetime.now(pytz.timezone('Europe/Lisbon'))
+    # now = datetime.datetime.now(pytz.timezone('Asia/Jerusalem'))
+    # now = datetime.datetime.now(pytz.timezone('America/New_York'))
+    if now.weekday() > 5:
+        return False
+    else:
+        if now.hour < 9 or now.hour > 19:
+            return False
+        elif now.hour == 9 and now.minute < 30:
+            return False
+        else:
+            return True
