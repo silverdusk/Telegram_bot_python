@@ -6,8 +6,6 @@ import json
 with open('config.json', 'r') as file:
     config = json.load(file)
 
-print(config)
-
 
 def text_input_validator(message):
     min_len = config['min_len_str']

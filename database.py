@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import datetime
 import psycopg2
 from psycopg2 import OperationalError
 
@@ -37,16 +38,17 @@ def create_connection():
 
 def insert_data_into_postgres(conn, message, request):
     cursor = conn.cursor()
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
     try:
         # Construct the SQL INSERT query
         sql_query = f"""INSERT INTO {DB_TABLE_NAME} (item_name, item_amount, item_type, item_price, 
-                                                                            availability, chat_id) 
-                       VALUES (%s, %s, %s, %s, %s, %s)"""
+                                                                            availability, chat_id, timestamp) 
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)"""
 
         # Execute the SQL query with the data from the request object
         cursor.execute(sql_query, (
             request.item_name, request.item_amount, request.item_type, request.item_price, request.availability,
-            message.chat.id))
+            message.chat.id, timestamp))
 
         # Commit the transaction
         conn.commit()
