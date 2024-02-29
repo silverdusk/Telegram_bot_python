@@ -4,11 +4,16 @@ import logging
 import datetime
 import psycopg2
 from psycopg2 import OperationalError
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models import Base, Item
 
 
 with open('config.json', 'r') as file:
     config = json.load(file)
 
+DB_URL = config['database']['db_url']
+engine = create_engine(DB_URL, echo=True)
 
 DB_NAME = config['database']['db_name']
 DB_USER = config['database']['user']
@@ -17,8 +22,42 @@ DB_HOST = config['database']['host']
 DB_PORT = config['database']['port']
 DB_TABLE_NAME = config['database']['table_name']
 
+Base.metadata.bind = engine
 
-def create_connection():
+DBSession = sessionmaker(bind=engine)
+
+
+def create_database_session():
+    return DBSession()
+
+
+def insert_item(session, message, request):
+    try:
+        item = Item(
+            item_name=request.item_name,
+            item_amount=request.item_amount,
+            item_type=request.item_type,
+            item_price=request.item_price,
+            availability=request.availability,
+            chat_id=message.chat.id
+        )
+        session.add(item)
+        session.commit()
+        return True
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Error inserting data into database: {e}")
+        print(f"Error inserting data into database: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def get_items_by_name(session, item_name):
+    return session.query(Item).filter(Item.item_name == item_name).all()
+
+
+def create_database_connection():
     conn = None
     try:
         conn = psycopg2.connect(
@@ -36,7 +75,7 @@ def create_connection():
     return conn
 
 
-def insert_data_into_postgres(conn, message, request):
+def insert_data_into_database(conn, message, request):
     cursor = conn.cursor()
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
     try:
@@ -83,3 +122,21 @@ def update_availability_in_database(conn, item, availability):
     finally:
         if cursor:
             cursor.close()
+
+
+def get_data_from_database(conn):
+    cursor = conn.cursor()
+    try:
+        # Construct the SQL SELECT query
+        sql_query = f"""SELECT * FROM {DB_TABLE_NAME} (item_name, item_amount, item_type, item_price, 
+                                                                                availability, chat_id, timestamp) 
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+        cursor.execute(sql_query, (
+            request.item_name, request.item_amount, request.item_type, request.item_price, request.availability,
+            message.chat.id, timestamp))
+        conn.commit()
+        logging.info("Data selected from Postgres database")
+    except psycopg2.Error as e:
+        logging.error(f"Error selecting data from Postgres database: {e}")
+        conn.rollback()
+

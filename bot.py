@@ -170,7 +170,7 @@ def check_availability_item(message, item):
                          f'Item {item}. \n'
                          f'Availability - not available')
         # Establish connection to Postgres database
-        conn = database.create_connection()
+        conn = database.create_database_connection()
         if conn is not None:
             try:
                 # Update availability status in Postgres database
@@ -185,7 +185,7 @@ def check_availability_item(message, item):
                          f'Item {item}. \n'
                          f'Availability - not available')
         # Establish connection to Postgres database
-        conn = database.create_connection()
+        conn = database.create_database_connection()
         if conn is not None:
             try:
                 # Update availability status in Postgres database
@@ -291,29 +291,31 @@ def request_decision_handler(message, request):
 
 
 def ok_request(message, request):
-    # Establish connection to Postgres database
-    conn = database.create_connection()
-    if conn is not None:
+    # Create a session using the sessionmaker
+    session = database.create_database_session()
+    if session is not None:
         try:
             # Insert data into Postgres database
-            database.insert_data_into_postgres(conn, message, request)
-
-            # Construct the text message to send
-            text = f'Request is placed for processing:{os.linesep}' \
-                   f'Item name: {request.item_name}, {os.linesep}' \
-                   f'Amount of items: {request.item_amount}, {os.linesep}' \
-                   f'Item type: {request.item_type}, {os.linesep}'
-            if request.item_type == 'spare part':
-                text += f'Item price: {request.item_price}, {os.linesep}'
-                text += f'Availability: {request.availability}, {os.linesep}'
-
-            # Send the text message using the bot
-            bot.send_message(message.chat.id, text)
-
+            if database.insert_item(session, message, request):
+                # Construct the text message to send
+                text = f'Request is placed for processing:{os.linesep}' \
+                       f'Item name: {request.item_name}, {os.linesep}' \
+                       f'Amount of items: {request.item_amount}, {os.linesep}' \
+                       f'Item type: {request.item_type}, {os.linesep}'
+                if request.item_type == 'spare part':
+                    text += f'Item price: {request.item_price}, {os.linesep}'
+                    text += f'Availability: {request.availability}, {os.linesep}'
+                # Send the text message using the bot
+                bot.send_message(message.chat.id, text)
+            else:
+                bot.send_message(message.chat.id, "Failed to process the request. Please try again later.")
+        except Exception as e:
+            bot.send_message(message.chat.id, f"An error occurred: {e}")
+            logging.error(f"An error occurred: {e}")
         finally:
             # Close the connection to the Postgres database
-            if conn:
-                conn.close()
+            if session:
+                session.close()
 
 
 def edit_request(message, request):
