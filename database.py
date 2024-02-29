@@ -39,7 +39,8 @@ def insert_item(session, message, request):
             item_type=request.item_type,
             item_price=request.item_price,
             availability=request.availability,
-            chat_id=message.chat.id
+            chat_id=message.chat.id,
+            timestamp=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         )
         session.add(item)
         session.commit()
@@ -53,8 +54,13 @@ def insert_item(session, message, request):
         session.close()
 
 
-def get_items_by_name(session, item_name):
-    return session.query(Item).filter(Item.item_name == item_name).all()
+def get_items(session, item_name=None, start_date=None, end_date=None):
+    query = session.query(Item)
+    if item_name:
+        query = query.filter(Item.item_name == item_name)
+    if start_date and end_date:
+        query = query.filter(Item.timestamp.between(start_date, end_date))
+    return query.all()
 
 
 def create_database_connection():

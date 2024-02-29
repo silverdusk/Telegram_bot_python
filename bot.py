@@ -79,7 +79,7 @@ def admin(message):
 
 @bot.message_handler(regexp='^get$')
 def get(message):
-    bug(message)
+    get_items_from_database(message)
 
 
 @bot.message_handler(regexp='^add$')
@@ -435,6 +435,7 @@ def update_availability_status(message):
 @bot.message_handler(commands=['stop'])
 def stop_bot(message):
     if message.chat.id not in AUTHORIZED_IDS:
+        bot.send_message(message.chat.id, f"Your ID ({message.chat.id}) is not authorized to stop bot")
         logging.warning(f"Unauthorized attempt to stop bot from chat {message.chat.id}")
         return
     logging.info("Stopping bot...")
@@ -446,6 +447,25 @@ def stop_bot(message):
     logging.info("Bot stopped at: " + str(datetime.datetime.utcnow()) + " UTC")
     print("Bot stopped.")
     exit(0)
+
+
+def get_items_from_database(message):
+    session = database.create_database_session()
+    try:
+        start_date = datetime.datetime(2024, 1, 1)
+        end_date = datetime.datetime(2024, 2, 1)
+        items = database.get_items(session, item_name='test', start_date=start_date, end_date=end_date)
+        if items:
+            item_info = "\n".join([f"Item: {item.item_name}, Amount: {item.item_amount}" for item in items])
+            bot.send_message(message.chat.id, f"Items in the database:\n{item_info}")
+        else:
+            bot.send_message(message.chat.id, "The item not found in the database.")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"An error occurred: {e}")
+        logging.error(f"Failed get items from database with error: {e}")
+    finally:
+        if session:
+            session.close()
 
 
 # Register the signal handler for SIGINT and SIGTERM
