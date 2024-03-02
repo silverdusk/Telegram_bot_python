@@ -11,8 +11,8 @@ import database
 import validators
 
 
-logging.basicConfig(filename='log.log', level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Load logging configuration from logging.ini
+logging.config.fileConfig('logging.ini')
 logging.info("Starting bot successfully at: " + str(datetime.datetime.utcnow()) + " UTC")
 
 with open('config.json', 'r') as file:
