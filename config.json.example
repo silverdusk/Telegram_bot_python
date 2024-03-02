@@ -1,0 +1,23 @@
+// Use this template to create your config.json file
+{
+  "bot_token": "PUT BOT TOKEN HERE",
+  "database": {
+    "db_name": "YOUR DB NAME",
+    "user": "NAME OF USER",
+    "password": "YOUR PASSWORD",
+    "host": "localhost",
+    "port": 5432,
+    "table_name": "YOUR TABLE NAME",
+    "db_url": "postgresql://username:password@host:port/db_name"
+  },
+  "authorized_ids": [
+    1234567890
+  ],
+  "min_len_str": 1,
+  "max_len_str": 255,
+  "skip_working_hours": "True",
+  "allowed_types": [
+    "spare part",
+    "miscellaneous"
+  ]
+}
