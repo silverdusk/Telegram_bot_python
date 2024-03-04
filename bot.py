@@ -5,11 +5,14 @@ import telebot
 import psycopg2
 from psycopg2 import OperationalError
 import re
-import logging
+import logging.config
 import json
 import database
 import validators
 
+
+# logging.basicConfig(filename='log.log', level=logging.DEBUG,
+#                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Load logging configuration from logging.ini
 logging.config.fileConfig('logging.ini')
@@ -307,8 +310,10 @@ def ok_request(message, request):
                     text += f'Availability: {request.availability}, {os.linesep}'
                 # Send the text message using the bot
                 bot.send_message(message.chat.id, text)
+                logging.info("Message was sent to the database module")
             else:
                 bot.send_message(message.chat.id, "Failed to process the request. Please try again later.")
+                logging.error("Failed to process the request to database module.")
         except Exception as e:
             bot.send_message(message.chat.id, f"An error occurred: {e}")
             logging.error(f"An error occurred: {e}")

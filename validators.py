@@ -1,8 +1,9 @@
 import re
-import logging
+import logging.config
 import json
 
 
+logging.config.fileConfig('logging.ini')
 with open('config.json', 'r') as file:
     config = json.load(file)
 

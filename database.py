@@ -1,12 +1,25 @@
 import os
 import json
-import logging
+import logging.config
 import datetime
 import psycopg2
 from psycopg2 import OperationalError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base, Item
+
+
+logging.config.fileConfig('logging.ini')
+
+# Create a logger specific to this module
+# logger = logging.getLogger(__name__)
+
+# Set the log level
+# logger.setLevel(logging.DEBUG)
+
+logging.debug('This is a test debug message')
+logging.info('This is a test info message')
+logging.error('This is a test error message')
 
 
 with open('config.json', 'r') as file:
@@ -28,6 +41,7 @@ DBSession = sessionmaker(bind=engine)
 
 
 def create_database_session():
+    logging.info('DB Session was created')
     return DBSession()
 
 
@@ -44,6 +58,7 @@ def insert_item(session, message, request):
         )
         session.add(item)
         session.commit()
+        logging.info("The item was inserted in the database")
         return True
     except Exception as e:
         session.rollback()
@@ -121,8 +136,10 @@ def update_availability_in_database(conn, item, availability):
 
         # Commit the transaction
         conn.commit()
+        logging.info("Availability status updated in Postgres database")
         print("Availability status updated in Postgres database")
     except psycopg2.Error as e:
+        logging.error(f"Error updating availability status in Postgres database: {e}")
         print(f"Error updating availability status in Postgres database: {e}")
         conn.rollback()
     finally:

@@ -3,5 +3,6 @@
   <component name="Black">
     <option name="sdkName" value="Python 3.10 (Telegram_bot)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 (Telegram_bot)" project-jdk-type="Python SDK" />
+  <component name="ExternalStorageConfigurationManager" enabled="true" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Poetry (Telegram_bot)" project-jdk-type="Python SDK" />
 </project>
