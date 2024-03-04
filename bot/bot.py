@@ -1,24 +1,20 @@
 import os
 import datetime
-import pytz
 import telebot
-import psycopg2
-from psycopg2 import OperationalError
-import re
 import logging.config
 import json
-import database
-import validators
+from database import database
+from validators import validators
 
 
 # logging.basicConfig(filename='log.log', level=logging.DEBUG,
 #                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Load logging configuration from logging.ini
-logging.config.fileConfig('logging.ini')
+logging.config.fileConfig('./logging.ini')
 logging.info("Starting bot successfully at: " + str(datetime.datetime.utcnow()) + " UTC")
 
-with open('config.json', 'r') as file:
+with open('./config.json', 'r') as file:
     config = json.load(file)
 
 # BOT_TOKEN = os.environ.get('BOT_TOKEN')

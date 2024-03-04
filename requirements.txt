@@ -1,0 +1,4 @@
+python~=3.10
+pyTelegramBotAPI~=4.16.1
+sqlalchemy~=2.0.28
+psycopg2~=2.9.9

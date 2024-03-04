@@ -1,15 +1,13 @@
-import os
 import json
 import logging.config
 import datetime
 import psycopg2
-from psycopg2 import OperationalError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import Base, Item
+from database.models import Base, Item
 
 
-logging.config.fileConfig('logging.ini')
+logging.config.fileConfig('./logging.ini')
 
 # Create a logger specific to this module
 # logger = logging.getLogger(__name__)
@@ -22,7 +20,7 @@ logging.info('This is a test info message')
 logging.error('This is a test error message')
 
 
-with open('config.json', 'r') as file:
+with open('./config.json', 'r') as file:
     config = json.load(file)
 
 DB_URL = config['database']['db_url']
