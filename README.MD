@@ -53,6 +53,50 @@ You're all set! Run the bot using the following command:
 poetry run python bot.py
 ```
 
+### Setting Up a PostgreSQL Database
+
+1. **Install PostgreSQL:**
+   - If PostgreSQL is not already installed on your system, follow the instructions provided on the [PostgreSQL official website](https://www.postgresql.org/download/) to download and install PostgreSQL for your operating system.
+
+2. **Create a Database:**
+   - Once PostgreSQL is installed, open a terminal or command prompt and access the PostgreSQL command-line interface by running `psql` (on Unix-based systems) or accessing the `psql` command from the PostgreSQL installation directory.
+   - Use the following command to create a new database for your project:
+     ```sql
+     CREATE DATABASE your_database_name;
+     ```
+   Replace `your_database_name` with the desired name for your database.
+
+3. **Create a Database User:**
+   - It's recommended to create a separate database user with restricted privileges for your project. This enhances security and isolates the access permissions for different applications.
+   - Use the following command to create a new database user:
+     ```sql
+     CREATE USER your_username WITH PASSWORD 'your_password';
+     ```
+   Replace `your_username` with the desired username and `your_password` with the desired password for the user.
+
+4. **Grant Privileges:**
+   - After creating the database user, you need to grant necessary privileges to the user on the database you created.
+   - Use the following command to grant all privileges on the database to the user:
+     ```sql
+     GRANT ALL PRIVILEGES ON DATABASE your_database_name TO your_username;
+     ```
+   Replace `your_database_name` and `your_username` with the appropriate values.
+
+5. **Verify Setup:**
+   - After completing the above steps, you can verify the database setup by connecting to the database using the newly created user credentials:
+     ```bash
+     psql -U your_username -d your_database_name -h localhost -W
+     ```
+   You will be prompted to enter the password for the user. If the connection is successful, you will be logged into the PostgreSQL database prompt.
+
+6. **Update Configuration:**
+   - In your project's configuration file (`config.json` or similar), update the database connection settings to reflect the database name, username, password, and host (`localhost` if running locally).
+
+7. **Testing Connection:**
+   - Before running your application, ensure that it can connect to the PostgreSQL database using the updated configuration. You can test the database connection by attempting to connect from your application code or using a database client.
+
+By following these steps, you can set up a PostgreSQL database for your project and configure your application to interact with it appropriately. Make sure to document any specific requirements or configurations relevant to your project in the README.md file for reference.
+
 ## Configuration
 
 - `BOT_TOKEN`: Your Telegram bot token obtained from the BotFather.
