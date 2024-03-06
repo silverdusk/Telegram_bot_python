@@ -93,7 +93,7 @@ poetry run python bot.py
    - Once the table is created, you should see it listed under the "Tables" section in pgAdmin.
    - You can also verify the table structure by right-clicking on it and selecting "Properties".
 5. **Create a Database User:**
-   It's recommended to create a separate database user with restricted privileges for your project. This enhances security and isolates the access permissions for different applications.
+- It's recommended to create a separate database user with restricted privileges for your project. This enhances security and isolates the access permissions for different applications.
    - In pgAdmin, in the tree, navigate to "Databases", right-click on "Login/Group Roles", and select "Create" > "Login/Group role".
    - Enter name of the new user and password.
    - Here's an example SQL query to create a new database user:
@@ -110,8 +110,8 @@ poetry run python bot.py
      ```
    Replace `your_database_name` and `your_username` with the appropriate values.
 
-7. **Grant Permissions**
-   Because the table uses a sequential column (for example, "id SERIAL PRIMARY KEY"), you may need to grant usage on the associated sequence.
+7. **Grant Permissions:**
+- Because the table uses a sequential column (for example, "id SERIAL PRIMARY KEY"), you may need to grant usage on the associated sequence.
    - Use the following command to grant permissions to your user:
      ```SQL
      GRANT USAGE ON SEQUENCE your_database_name_id_seq TO your_username;
