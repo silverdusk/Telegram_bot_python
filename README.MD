@@ -52,7 +52,71 @@ You're all set! Run the bot using the following command:
 ```Bash
 poetry run python bot.py
 ```
-### Configuring PostgreSQL Server with pgAdmin
+
+### Setting Up a PostgreSQL Database and Configuring Server with pgAdmin
+
+#### Setting Up a PostgreSQL Database and Table
+
+1. **Install PostgreSQL:**
+   - If you haven't already installed PostgreSQL, you can download and install it from the [PostgreSQL website](https://www.postgresql.org/download/).
+   - Follow the installation instructions provided for your operating system.
+
+2. **Create a Database:**
+   - Once PostgreSQL is installed, open pgAdmin or use the command line to access the PostgreSQL shell (`psql`).
+   - In pgAdmin, right-click on "Databases" and select "Create" > "Database".
+   - Enter a name for the database and click "Save".
+   - Alternatively, in the PostgreSQL shell, run the following SQL command to create a database:
+     ```sql
+     CREATE DATABASE database_name;
+     ```
+    Replace `database_name` with the desired name for your database.
+
+3. **Create a Table:**
+   - In pgAdmin, navigate to your newly created database, right-click on "Tables", and select "Create" > "Table".
+   - Enter the table name and define the table columns along with their data types and constraints.
+   - Here's an example SQL query to create the table with the specified fields:
+     ```sql
+     CREATE TABLE my_table (
+         id SERIAL PRIMARY KEY,
+         item_name VARCHAR(255),
+         item_amount INTEGER,
+         item_type VARCHAR(255),
+         item_price NUMERIC,
+         availability BOOLEAN,
+         chat_id BIGINT,
+         timestamp TIMESTAMP WITHOUT TIME ZONE
+     );
+     ```
+   - Execute the query to create the table.
+
+4. **Verify Table Creation:**
+   - Once the table is created, you should see it listed under the "Tables" section in pgAdmin.
+   - You can also verify the table structure by right-clicking on it and selecting "Properties".
+5. **Create a Database User:**
+   It's recommended to create a separate database user with restricted privileges for your project. This enhances security and isolates the access permissions for different applications.
+   - In pgAdmin, in the tree, navigate to "Databases", right-click on "Login/Group Roles", and select "Create" > "Login/Group role".
+   - Enter name of the new user and password.
+   - Here's an example SQL query to create a new database user:
+     ```SQL
+     CREATE USER your_username WITH PASSWORD 'your_password';
+     ```
+   Replace `your_username` with the desired username and `your_password` with the desired password for the user.
+
+6. **Grant Privileges:**
+   - After creating the database user, you need to grant necessary privileges to the user on the database you created.
+   - Use the following command to grant all privileges on the database to the user:
+     ```SQL
+     GRANT ALL PRIVILEGES ON DATABASE your_database_name TO your_username;
+     ```
+   Replace `your_database_name` and `your_username` with the appropriate values.
+
+7. **Grant Permissions**
+   Because the table uses a sequential column (for example, "id SERIAL PRIMARY KEY"), you may need to grant usage on the associated sequence.
+   - Use the following command to grant permissions to your user:
+     ```SQL
+     GRANT USAGE ON SEQUENCE your_database_name_id_seq TO your_username;
+     ```
+#### Configuring PostgreSQL Server with pgAdmin
 
 1. **Install pgAdmin:**
    - If you haven't already installed pgAdmin, you can download and install it from the [pgAdmin website](https://www.pgadmin.org/download/).
@@ -86,49 +150,18 @@ poetry run python bot.py
    - Verify that you can connect to the PostgreSQL server and access your database from pgAdmin.
    - Ensure that you can perform necessary database operations using pgAdmin, such as creating tables and inserting data.
 
-By configuring PostgreSQL server with pgAdmin, you can easily manage your databases and perform administrative tasks through a graphical interface. Make sure to familiarize yourself with pgAdmin's features to effectively manage your PostgreSQL environment.
-
-### Setting Up a PostgreSQL Database
-
-1. **Install PostgreSQL:**
-   - If PostgreSQL is not already installed on your system, follow the instructions provided on the [PostgreSQL official website](https://www.postgresql.org/download/) to download and install PostgreSQL for your operating system.
-
-2. **Create a Database:**
-   - Once PostgreSQL is installed, open a terminal or command prompt and access the PostgreSQL command-line interface by running `psql` (on Unix-based systems) or accessing the `psql` command from the PostgreSQL installation directory.
-   - Use the following command to create a new database for your project:
-     ```sql
-     CREATE DATABASE your_database_name;
-     ```
-   Replace `your_database_name` with the desired name for your database.
-
-3. **Create a Database User:**
-   - It's recommended to create a separate database user with restricted privileges for your project. This enhances security and isolates the access permissions for different applications.
-   - Use the following command to create a new database user:
-     ```sql
-     CREATE USER your_username WITH PASSWORD 'your_password';
-     ```
-   Replace `your_username` with the desired username and `your_password` with the desired password for the user.
-
-4. **Grant Privileges:**
-   - After creating the database user, you need to grant necessary privileges to the user on the database you created.
-   - Use the following command to grant all privileges on the database to the user:
-     ```sql
-     GRANT ALL PRIVILEGES ON DATABASE your_database_name TO your_username;
-     ```
-   Replace `your_database_name` and `your_username` with the appropriate values.
-
-5. **Verify Setup:**
+8. **Verify Setup (optional):**
    - After completing the above steps, you can verify the database setup by connecting to the database using the newly created user credentials:
      ```bash
      psql -U your_username -d your_database_name -h localhost -W
      ```
    You will be prompted to enter the password for the user. If the connection is successful, you will be logged into the PostgreSQL database prompt.
 
-6. **Update Configuration:**
-   - In your project's configuration file (`config.json` or similar), update the database connection settings to reflect the database name, username, password, and host (`localhost` if running locally).
+9. **Update Configuration:**
+   - In your project's configuration file (`config.json`), update the database connection settings to reflect the database name, username, password, and host (`localhost` if running locally).
 
-7. **Testing Connection:**
-   - Before running your application, ensure that it can connect to the PostgreSQL database using the updated configuration. You can test the database connection by attempting to connect from your application code or using a database client.
+10. **Testing Connection:**
+    - Before running your application, ensure that it can connect to the PostgreSQL database using the updated configuration. You can test the database connection by attempting to connect from your application code or using a database client.
 
 By following these steps, you can set up a PostgreSQL database for your project and configure your application to interact with it appropriately. Make sure to document any specific requirements or configurations relevant to your project in the README.md file for reference.
 
