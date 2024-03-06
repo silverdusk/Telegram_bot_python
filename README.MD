@@ -52,6 +52,41 @@ You're all set! Run the bot using the following command:
 ```Bash
 poetry run python bot.py
 ```
+### Configuring PostgreSQL Server with pgAdmin
+
+1. **Install pgAdmin:**
+   - If you haven't already installed pgAdmin, you can download and install it from the [pgAdmin website](https://www.pgadmin.org/download/).
+   - Follow the installation instructions provided for your operating system.
+
+2. **Access pgAdmin:**
+   - Once pgAdmin is installed, open the application. It usually opens in your default web browser.
+
+3. **Add PostgreSQL Server:**
+   - In pgAdmin, click on the "Add New Server" icon or go to the "File" menu and select "Add Server".
+   - Enter a name for the server in the "Name" field.
+   - In the "Connection" tab:
+     - Enter "localhost" or the IP address of your PostgreSQL server in the "Host name/address" field.
+     - Enter the port number (default is 5432) in the "Port" field.
+     - Enter the username and password you set up during PostgreSQL installation in the "Username" and "Password" fields, respectively.
+   - Click "Save" to add the server.
+
+4. **Connect to the Server:**
+   - After adding the server, you should see it listed in the pgAdmin interface.
+   - Click on the server name to connect to it. You may be prompted to enter the password again.
+
+5. **Explore Databases:**
+   - Once connected, you can explore the databases on the server by expanding the server name in the navigation pane.
+   - You should see a list of databases, including the one you created for your project.
+
+6. **Manage Databases and Objects:**
+   - pgAdmin provides a user-friendly interface for managing databases, tables, and other database objects.
+   - You can perform various tasks such as creating tables, executing SQL queries, and managing user permissions directly from pgAdmin.
+
+7. **Verify Configuration:**
+   - Verify that you can connect to the PostgreSQL server and access your database from pgAdmin.
+   - Ensure that you can perform necessary database operations using pgAdmin, such as creating tables and inserting data.
+
+By configuring PostgreSQL server with pgAdmin, you can easily manage your databases and perform administrative tasks through a graphical interface. Make sure to familiarize yourself with pgAdmin's features to effectively manage your PostgreSQL environment.
 
 ### Setting Up a PostgreSQL Database
 
