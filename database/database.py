@@ -1,3 +1,4 @@
+import os
 import json
 import logging.config
 import datetime
@@ -7,7 +8,10 @@ from sqlalchemy.orm import sessionmaker
 from database.models import Base, Item
 
 
-logging.config.fileConfig('./logging.ini')
+log_config_path = os.path.join(os.path.dirname(__file__), 'logging.ini')
+# Load the logging configuration from the absolute path
+logging.config.fileConfig(log_config_path)
+# logging.config.fileConfig('./logging.ini')
 
 # Create a logger specific to this module
 # logger = logging.getLogger(__name__)
