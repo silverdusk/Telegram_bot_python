@@ -8,8 +8,9 @@ from sqlalchemy.orm import sessionmaker
 from database.models import Base, Item
 
 
-log_config_path = os.path.join(os.path.dirname(__file__), 'logging.ini')
+root_dir = os.path.dirname(os.path.dirname(__file__))
 # Load the logging configuration from the absolute path
+log_config_path = os.path.join(root_dir, 'logging.ini')
 logging.config.fileConfig(log_config_path)
 # logging.config.fileConfig('./logging.ini')
 
