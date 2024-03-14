@@ -25,6 +25,8 @@ The project is organized into the following modules:
 - Poetry 
 - Postgres
 - sqlalchemy 2.0.27
+- Pytest
+- Allure
 
 ## Installation
 
