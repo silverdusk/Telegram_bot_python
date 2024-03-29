@@ -1,6 +1,7 @@
 import pytest
 import allure
 from unittest.mock import MagicMock
+from unittest.mock import patch
 from bot.bot import Bot
 import logging
 
@@ -8,8 +9,9 @@ import logging
 @pytest.fixture(scope='session', autouse=True)
 def configure_logging():
     # Load the test-specific logging configuration
-    logging.config.fileConfig('./logging_test.ini')
-
+    # logging.config.fileConfig('./logging_test.ini')
+    with patch('logging.config.fileConfig'):
+        yield
 
 @pytest.fixture
 def mock_bot():
