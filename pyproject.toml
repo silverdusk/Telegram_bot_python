@@ -8,9 +8,16 @@ packages = [{include = "telegram_bot"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pyTelegramBotAPI = "^4.16.1"
-psycopg2 = "^2.9.9"
-sqlalchemy = "^2.0.27"
+fastapi = "^0.109.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+python-telegram-bot = "^20.7"
+asyncpg = "^0.29.0"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.27"}
+pydantic = "^2.5.3"
+pydantic-settings = "^2.1.0"
+httpx = "^0.26.0"
+python-multipart = "^0.0.6"
+pytz = "^2024.1"
 pytest = "^8.1.1"
 allure-pytest = "^2.13.3"
 
