@@ -1,6 +1,7 @@
 """Application configuration using Pydantic Settings."""
-from typing import List
-from pydantic import Field
+import json
+from typing import List, Union
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,11 +38,31 @@ class Settings(BaseSettings):
     
     # Bot settings
     bot_token: str = Field(..., description="Telegram bot token")
-    authorized_ids: List[int] = Field(default_factory=list, description="Authorized user IDs")
+    authorized_ids: List[int] = Field(default_factory=list, description="Authorized user IDs (JSON in env: [123,456])")
     allowed_types: List[str] = Field(
         default_factory=lambda: ["spare part", "miscellaneous"],
-        description="Allowed item types"
+        description="Allowed item types (JSON in env)"
     )
+
+    @field_validator("authorized_ids", mode="before")
+    @classmethod
+    def parse_authorized_ids(cls, v: Union[List[int], str]) -> List[int]:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [int(x.strip()) for x in v.split(",") if x.strip()]
+        return v if v is not None else []
+
+    @field_validator("allowed_types", mode="before")
+    @classmethod
+    def parse_allowed_types(cls, v: Union[List[str], str]) -> List[str]:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [x.strip() for x in v.split(",") if x.strip()]
+        return v if v is not None else ["spare part", "miscellaneous"]
     
     # Validation settings
     min_len_str: int = Field(default=1, description="Minimum string length")
@@ -56,6 +77,23 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, description="Debug mode")
     webhook_url: str = Field(default="", description="Webhook URL for Telegram bot")
     webhook_secret_token: str = Field(default="", description="Secret token for webhook verification")
+    create_tables_on_startup: bool = Field(default=True, description="Run create_all on startup (set false if using migrations)")
+    cors_origins: List[str] = Field(
+        default_factory=lambda: ["*"],
+        description="CORS allow_origins (use ['*'] for all, or list of origins for production)",
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Union[List[str], str]) -> List[str]:
+        if isinstance(v, str):
+            if v.strip() in ("*", ""):
+                return ["*"]
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [x.strip() for x in v.split(",") if x.strip()]
+        return v if v is not None else ["*"]
     
     @classmethod
     def from_json(cls, config_path: str = "./config.json") -> "Settings":
@@ -80,13 +118,12 @@ settings: Settings | None = None
 
 
 def get_settings() -> Settings:
-    """Get application settings."""
+    """Load config: config.json if present (local), else .env / environment (e.g. Docker)."""
     global settings
     if settings is None:
         try:
             settings = Settings.from_json()
         except FileNotFoundError:
-            # Fallback to environment variables
             settings = Settings()
     return settings
 

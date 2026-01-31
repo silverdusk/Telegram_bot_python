@@ -1,6 +1,7 @@
 """FastAPI application main entry point."""
 import logging
 import logging.config
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,8 +9,16 @@ from app.core.config import get_settings, Settings
 from app.database.session import init_db, close_db, create_tables
 from app.api.v1 import webhook
 
-# Configure logging
-logging.config.fileConfig('./logging.ini')
+# Configure logging: use logging.ini if present, else basicConfig (e.g. in Docker)
+_ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_LOG_INI = os.path.join(_ROOT_DIR, "logging.ini")
+if os.path.isfile(_LOG_INI):
+    logging.config.fileConfig(_LOG_INI)
+else:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +31,9 @@ async def lifespan(app: FastAPI):
     
     # Initialize database
     init_db()
-    await create_tables()
+    if get_settings().create_tables_on_startup:
+        await create_tables()
+        logger.info("Database tables created")
     logger.info("Database initialized")
     
     yield
@@ -45,10 +56,10 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
     
-    # CORS middleware
+    # CORS middleware (use CORS_ORIGINS env in production to restrict)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately for production
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

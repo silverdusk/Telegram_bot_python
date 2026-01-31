@@ -1,6 +1,8 @@
 # Telegram Bot Project
 
-This project is a Telegram bot built with Python using the Telebot library. It allows users to interact with the bot to perform various tasks, such as adding items to a database, retrieving data from the database, and more.
+This project is a Telegram bot built with Python using the Telebot library.
+
+**→ [Deploy and run on a server (manual)](docs/DEPLOY_MANUAL.md)** It allows users to interact with the bot to perform various tasks, such as adding items to a database, retrieving data from the database, and more.
 
 ## Features
 

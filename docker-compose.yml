@@ -1,0 +1,39 @@
+# Telegram Bot + PostgreSQL (optional). For production with external DB,
+# run only: docker compose up -d app (and set DATABASE__HOST in .env).
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE__HOST: ${DATABASE__HOST:-db}
+      DATABASE__PORT: ${DATABASE__PORT:-5432}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/webhook/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE__USER:-botuser}
+      POSTGRES_PASSWORD: ${DATABASE__PASSWORD:-botpass}
+      POSTGRES_DB: ${DATABASE__DB_NAME:-telegram_bot}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE__USER:-botuser} -d ${DATABASE__DB_NAME:-telegram_bot}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:

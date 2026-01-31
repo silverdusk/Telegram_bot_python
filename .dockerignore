@@ -1,0 +1,54 @@
+# Git and IDE
+.git
+.gitignore
+.idea
+*.iml
+.vscode
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+env
+pyvenv.cfg
+*.egg-info
+.eggs
+dist
+build
+
+# Config and secrets (provide via env or mount)
+config.json
+.env
+.env.local
+*.pem
+
+# Tests and dev
+tests
+pytest.ini
+.pytest_cache
+.coverage
+htmlcov
+allure-results
+allure-report
+logging_test.ini
+
+# Logs
+logs
+*.log
+
+# Docs (optional to keep image small)
+# README.MD
+# MIGRATION_GUIDE.md
+# DEPLOYMENT.md
+
+# Misc
+*.md
+!README.MD
+SQL_queries
+bot
+validators
+requirements.txt
