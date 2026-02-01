@@ -4,11 +4,11 @@ version = "0.1.0"
 description = ""
 authors = ["silverdusk <kirill@dr.com>"]
 readme = "README.md"
-packages = [{include = "telegram_bot"}]
+packages = [{include = "app"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-fastapi = "^0.109.0"
+fastapi = "^0.128.0"
 uvicorn = {extras = ["standard"], version = "^0.27.0"}
 python-telegram-bot = "^20.7"
 asyncpg = "^0.29.0"
@@ -16,7 +16,7 @@ sqlalchemy = {extras = ["asyncio"], version = "^2.0.27"}
 pydantic = "^2.5.3"
 pydantic-settings = "^2.1.0"
 httpx = "^0.26.0"
-python-multipart = "^0.0.6"
+python-multipart = "^0.0.18"
 pytz = "^2024.1"
 pytest = "^8.1.1"
 allure-pytest = "^2.13.3"
