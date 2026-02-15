@@ -18,7 +18,7 @@ bot_application: Application | None = None
 bot_service: BotService | None = None
 
 
-def get_bot_application() -> tuple[Application, BotService]:
+async def get_bot_application() -> tuple[Application, BotService]:
     """Get or create bot application instance."""
     global bot_application, bot_service
     
@@ -34,6 +34,9 @@ def get_bot_application() -> tuple[Application, BotService]:
         # Register handlers
         from app.api.v1.handlers import register_handlers
         register_handlers(bot_application, bot_service)
+
+        # Initialize application:
+        await bot_application.initialize()
         
         logger.info("Bot application initialized")
     
@@ -75,7 +78,7 @@ async def telegram_webhook(
             return {"ok": False, "error": "Invalid update"}
         
         # Process update with bot application
-        app, _ = get_bot_application()
+        app, _ = await get_bot_application()
         
         # Process update (context is created automatically)
         # We need to pass db session through update callback data

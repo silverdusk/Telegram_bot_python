@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings, Settings
 from app.database.session import init_db, close_db, create_tables
 from app.api.v1 import webhook
+from app.api.v1.webhook import get_bot_application
 
 # Configure logging: use logging.ini if present, else basicConfig (e.g. in Docker)
 _ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -35,12 +36,21 @@ async def lifespan(app: FastAPI):
         await create_tables()
         logger.info("Database tables created")
     logger.info("Database initialized")
-    
+
+    # Initialize Telegram bot application (webhook mode)
+    await get_bot_application()
+    logger.info("Telegram bot application ready")
+
     yield
     
     # Shutdown
     logger.info("Shutting down application...")
     await close_db()
+
+    from app.api.v1 import webhook as webhook_module
+    if webhook_module.bot_application is not None:
+        await webhook_module.bot_application.shutdown()
+
     logger.info("Application shut down")
 
 
