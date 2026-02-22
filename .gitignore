@@ -2,3 +2,8 @@ config.json
 .env
 .env.local
 .env.*.local
+
+# Log files
+logs/
+**/logs/
+**/*.log
