@@ -314,6 +314,23 @@ class BotService:
             await self.bot.send_message(chat_id, "Failed to process the request. Please try again later.")
             return None
 
+    async def start_update_item_flow(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> None:
+        """Start Update item flow from a chat (e.g. after 'Update another item' callback)."""
+        clear_flow_state(context)
+        context.user_data['state'] = 'waiting_for_update_item_name'
+        context.user_data['update_data'] = {}
+        await self.bot.send_message(
+            chat_id,
+            'Please provide the exact name of the item to update.\nOr /cancel to cancel.',
+            reply_markup=ForceReply(selective=True),
+        )
+        logger.info("Update item flow started (another) chat_id=%s", chat_id)
+
     async def start_add_item_flow(
         self,
         context: ContextTypes.DEFAULT_TYPE,
@@ -394,9 +411,33 @@ class BotService:
             else:
                 await msg.reply_text("No items found in the database.")
                 logger.info("Get items returned empty chat_id=%s", chat_id)
+            await msg.reply_text(
+                'What would you like to do next?',
+                reply_markup=self._back_to_menu_keyboard(),
+            )
         except Exception as e:
             logger.error("Error getting items: %s", type(e).__name__, exc_info=True)
             await msg.reply_text("An error occurred. Please try again later.")
+            await msg.reply_text(
+                'What would you like to do next?',
+                reply_markup=self._back_to_menu_keyboard(),
+            )
+
+    async def start_remove_item_flow(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> None:
+        """Start Remove item flow from chat (e.g. after 'Remove another item' callback)."""
+        clear_flow_state(context)
+        context.user_data['state'] = 'waiting_for_remove_item_name'
+        await self.bot.send_message(
+            chat_id,
+            'Please provide the name of the item to remove.\nOr /cancel to cancel.',
+            reply_markup=ForceReply(selective=True),
+        )
+        logger.info("Remove item flow started (another) chat_id=%s", chat_id)
 
     async def handle_remove_item(
         self,
@@ -457,9 +498,27 @@ class BotService:
             else:
                 await update.message.reply_text(f'No items found with that name ("{raw}").')
                 logger.info("Remove item: none found chat_id=%s name=%s", chat_id, raw)
+            next_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton('Remove another item', callback_data='remove_another_item')],
+                [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+            ])
+            await update.message.reply_text(
+                'What would you like to do next?',
+                reply_markup=next_keyboard,
+            )
         except Exception as e:
             logger.error("Error removing item: %s", type(e).__name__, exc_info=True)
             await update.message.reply_text("An error occurred. Please try again later.")
+            await update.message.reply_text(
+                'What would you like to do next?',
+                reply_markup=self._back_to_menu_keyboard(),
+            )
+
+    def _back_to_menu_keyboard(self) -> InlineKeyboardMarkup:
+        """Single 'Back to menu' button (for end of flows)."""
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+        ])
 
     def _update_field_keyboard(self) -> InlineKeyboardMarkup:
         """Inline keyboard for choosing which field to update or Done."""
@@ -688,6 +747,15 @@ class BotService:
                         f'type={updated.item_type}, price={updated.item_price}, availability={updated.availability}',
                     )
                     logger.info("Update item done id=%s chat_id=%s", update_item_id, chat_id)
+                    next_keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton('Update another item', callback_data='update_another_item')],
+                        [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+                    ])
+                    await self.bot.send_message(
+                        chat_id,
+                        'What would you like to do next?',
+                        reply_markup=next_keyboard,
+                    )
                 else:
                     await self.bot.send_message(chat_id, "Item could not be updated. Please try again.")
             except Exception as e:
@@ -753,6 +821,22 @@ class BotService:
                 context.user_data.setdefault('update_data', {})['item_type'] = chosen.lower()
             context.user_data['state'] = 'waiting_for_update_field'
             await self.bot.send_message(chat_id, 'Updated. What else?', reply_markup=self._update_field_keyboard())
+
+    async def start_availability_flow(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> None:
+        """Start Change availability flow from chat (e.g. after 'Change availability status' again callback)."""
+        clear_flow_state(context)
+        context.user_data['state'] = 'waiting_for_availability_item_name'
+        await self.bot.send_message(
+            chat_id,
+            'Please provide item name.\nOr /cancel to cancel.',
+            reply_markup=ForceReply(selective=True),
+        )
+        logger.info("Availability update flow started (another) chat_id=%s", chat_id)
 
     async def update_availability_status(
         self,
@@ -847,7 +931,14 @@ class BotService:
                 else:
                     await update.message.reply_text(f'Item {item_name} not found.')
                     logger.info("Availability update: item not found chat_id=%s", update.effective_chat.id)
-
+                next_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton('Change availability status', callback_data='change_availability_again')],
+                    [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+                ])
+                await update.message.reply_text(
+                    'What would you like to do next?',
+                    reply_markup=next_keyboard,
+                )
                 # Clear state
                 context.user_data.pop('state', None)
                 context.user_data.pop('availability_item_name', None)
@@ -887,6 +978,15 @@ class BotService:
             else:
                 await self.bot.send_message(chat_id, f'Item "{item_name}" not found.')
                 logger.info("Availability update: item not found chat_id=%s", chat_id)
+            next_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton('Change availability status', callback_data='change_availability_again')],
+                [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+            ])
+            await self.bot.send_message(
+                chat_id,
+                'What would you like to do next?',
+                reply_markup=next_keyboard,
+            )
         except Exception as e:
             logger.error("Error updating availability: %s", type(e).__name__, exc_info=True)
             await self.bot.send_message(chat_id, "An error occurred. Please try again later.")
@@ -930,6 +1030,10 @@ class BotService:
             )
             await msg.reply_text(text)
             logger.info("Test message sent chat_id=%s", chat_id)
+            await msg.reply_text(
+                'What would you like to do next?',
+                reply_markup=self._back_to_menu_keyboard(),
+            )
         except Exception as e:
             logger.error("Error sending test message: %s", type(e).__name__, exc_info=True)
             await msg.reply_text("Failed to process the request. Please try again later.")
@@ -945,6 +1049,10 @@ class BotService:
                 photo='https://cdn-icons-png.flaticon.com/512/249/249389.png',
                 caption="We're working on it!",
                 protect_content=True,
+            )
+            await msg.reply_text(
+                'What would you like to do next?',
+                reply_markup=self._back_to_menu_keyboard(),
             )
     
     async def stop_bot(

@@ -8,7 +8,7 @@ A Telegram bot for item management: add, list, update, and remove items; change 
 ## Features
 
 - **Item management**: Add items (name, amount, type, price, availability), get list of your items, **update item** (by exact name: change name, amount, type, price, availability), **remove items by name**, change availability by item name.
-- **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`. Update-item flow: enter exact name → choose fields to change (inline buttons) → enter new values → Done. Remove-item flow: enter name → items matching that name (for the current chat) are deleted.
+- **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`. Update-item flow: enter exact name → choose fields to change (inline buttons) → enter new values → Done. Remove-item flow: enter name → items matching that name (for the current chat) are deleted. **No dead ends**: after every flow the bot asks “What would you like to do next?” with **Back to menu** and, where relevant, an option to repeat the same action (e.g. Add another item, Update another item, Remove another item).
 - **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Remove item, Update item, Admin, Change availability, Send test message, Stop).
 - **Validation**: Length and character rules for names; amount/price range checks; working-hours check for Add (configurable).
 - **Authorization**: Stop command restricted to configured user IDs.
@@ -37,7 +37,7 @@ bot/                  # Legacy Telebot-based bot (optional)
 tests/
   conftest.py         # Fixtures (mock_settings, mock_bot, mock_context)
   test_validators.py  # Validators
-  test_app_bot_service.py  # clear_flow_state, keyboards, remove/update flows, apply_update_field_choice
+  test_app_bot_service.py  # clear_flow_state, keyboards, remove/update/availability flows, apply_update_field_choice, start_*_flow
   test_app_repository.py   # get_item_by_id, update_item, delete_by_name_and_chat
   test_schemas.py     # ItemCreate, ItemUpdate
 ```
@@ -122,7 +122,7 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 Leave `WEBHOOK_SECRET_TOKEN` empty in `.env` if you do not use a secret.
 
 **Important – secret token and 403:**  
-If you set the webhook **without** a secret (no `secret_token` in the `curl` above), you must **remove or leave empty** `WEBHOOK_SECRET_TOKEN` in `.env` and restart the app. If the app has a secret set but Telegram sends requests without it (or with a different one), the app returns **403** and the bot will not reply even though the webhook is called. See [DEPLOYMENT.md – Troubleshooting](DEPLOYMENT.md#8-troubleshooting) for more.
+If you set the webhook **without** a secret (no `secret_token` in the `curl` above), you must **remove or leave empty** `WEBHOOK_SECRET_TOKEN` in `.env` and restart the app. If the app has a secret set but Telegram sends requests without it (or with a different one), the app returns **403** and the bot will not reply even though the webhook is called. See [Troubleshooting (webhook)](#troubleshooting-webhook) below or [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#8-troubleshooting) for more.
 
 ## Configuration
 
@@ -203,11 +203,10 @@ For a more detailed PostgreSQL and pgAdmin setup, see the previous version of th
   1. Confirm the webhook is set: `curl -s "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"` (see `result.url`).  
   2. Confirm the app is reachable: `curl -X POST https://your-domain.com/webhook/telegram -H "Content-Type: application/json" -d '{}'` (you should get a JSON response, not a connection error).  
   3. **403 from webhook** → Secret token mismatch: if you registered the webhook without a secret, remove or leave empty `WEBHOOK_SECRET_TOKEN` in `.env` and recreate/restart the app container so the new env is loaded.  
-- More details: [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#8-troubleshooting).
+- More: [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#8-troubleshooting).
 
 ## Documentation
 
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** – Docker, webhook, HTTPS, checklist.
 - **[docs/DEPLOY_MANUAL.md](docs/DEPLOY_MANUAL.md)** – Manual server deployment.
-- **[docs/DIALOGUE_FLOW_REVIEW.md](docs/DIALOGUE_FLOW_REVIEW.md)** – Dialogue flow and improvement notes.
 - **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** – Moving from Telebot to FastAPI/webhook.

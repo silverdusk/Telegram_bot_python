@@ -152,6 +152,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     if chat_id is not None and query.data == 'add_another':
         await bot_service.start_add_item_flow(context, db_session, chat_id)
         return
+    if chat_id is not None and query.data == 'update_another_item':
+        await bot_service.start_update_item_flow(context, db_session, chat_id)
+        return
+    if chat_id is not None and query.data == 'remove_another_item':
+        await bot_service.start_remove_item_flow(context, db_session, chat_id)
+        return
+    if chat_id is not None and query.data == 'change_availability_again':
+        await bot_service.start_availability_flow(context, db_session, chat_id)
+        return
     if chat_id is not None and query.data == 'show_menu':
         await bot_service.send_menu_to_chat(chat_id)
         return

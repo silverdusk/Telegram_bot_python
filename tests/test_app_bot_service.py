@@ -79,6 +79,17 @@ class TestBotServiceKeyboards:
         assert "update_field_availability" in callback_data_list
         assert "update_field_done" in callback_data_list
 
+    def test_back_to_menu_keyboard_has_show_menu(self, get_settings, mock_settings, mock_bot):
+        get_settings.return_value = mock_settings
+        service = BotService(mock_bot)
+        keyboard = service._back_to_menu_keyboard()
+        assert keyboard is not None
+        all_buttons = [btn for row in keyboard.inline_keyboard for btn in row]
+        callback_data_list = [btn.callback_data for btn in all_buttons]
+        assert "show_menu" in callback_data_list
+        assert len(all_buttons) >= 1
+        assert any(btn.text == "Back to menu" for btn in all_buttons)
+
 
 @patch("app.services.bot_service.get_settings")
 class TestHandleRemoveItem:
@@ -139,8 +150,9 @@ class TestProcessRemoveItem:
 
         mock_repo.delete_by_name_and_chat.assert_called_once_with("Widget", 456)
         assert mock_context.user_data.get("state") is None
-        msg.reply_text.assert_called_once()
-        assert "Removed 2 item(s)" in msg.reply_text.call_args[0][0]
+        assert msg.reply_text.call_count == 2
+        assert "Removed 2 item(s)" in msg.reply_text.call_args_list[0][0][0]
+        assert "What would you like to do next" in msg.reply_text.call_args_list[1][0][0]
 
     def test_replies_not_found_when_zero_deleted(
         self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
@@ -160,8 +172,9 @@ class TestProcessRemoveItem:
             service = BotService(mock_bot)
             asyncio.run(service.process_remove_item(update, context=mock_context, session=session))
 
-        msg.reply_text.assert_called_once()
-        assert "No items found" in msg.reply_text.call_args[0][0]
+        assert msg.reply_text.call_count == 2
+        assert "No items found" in msg.reply_text.call_args_list[0][0][0]
+        assert "What would you like to do next" in msg.reply_text.call_args_list[1][0][0]
 
     def test_replies_empty_name_error_when_text_stripped_empty(
         self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
@@ -404,8 +417,9 @@ class TestApplyUpdateFieldChoice:
         assert mock_context.user_data.get("state") is None
         assert mock_context.user_data.get("update_item_id") is None
         service.bot.send_message.assert_called()
-        msg_text = service.bot.send_message.call_args[0][1]
-        assert "Item updated" in msg_text or "NewName" in msg_text
+        all_msg_texts = [c[0][1] for c in service.bot.send_message.call_args_list]
+        assert any("Item updated" in t or "NewName" in t for t in all_msg_texts)
+        assert any("What would you like to do next" in t for t in all_msg_texts)
 
     def test_done_with_no_update_data_sends_no_changes(self, get_settings, mock_settings, mock_bot, mock_context):
         get_settings.return_value = mock_settings
@@ -473,3 +487,37 @@ class TestApplyUpdateFieldChoice:
         assert mock_context.user_data["state"] == "waiting_for_update_field"
         service.bot.send_message.assert_called_once()
         assert "Yes" in service.bot.send_message.call_args[0][1] or "else" in service.bot.send_message.call_args[0][1]
+
+
+@patch("app.services.bot_service.get_settings")
+class TestStartRemoveItemFlow:
+    """Tests for start_remove_item_flow (callback: Remove another item)."""
+
+    def test_sets_state_and_asks_for_item_name(self, get_settings, mock_settings, mock_bot, mock_context):
+        get_settings.return_value = mock_settings
+        mock_context.user_data = {}
+        session = MagicMock()
+        service = BotService(mock_bot)
+        service.bot.send_message = AsyncMock()
+        asyncio.run(service.start_remove_item_flow(mock_context, session, chat_id=456))
+        assert mock_context.user_data["state"] == "waiting_for_remove_item_name"
+        service.bot.send_message.assert_called_once()
+        text = service.bot.send_message.call_args[0][1]
+        assert "remove" in text.lower() and "name" in text.lower()
+
+
+@patch("app.services.bot_service.get_settings")
+class TestStartAvailabilityFlow:
+    """Tests for start_availability_flow (callback: Change availability status again)."""
+
+    def test_sets_state_and_asks_for_item_name(self, get_settings, mock_settings, mock_bot, mock_context):
+        get_settings.return_value = mock_settings
+        mock_context.user_data = {}
+        session = MagicMock()
+        service = BotService(mock_bot)
+        service.bot.send_message = AsyncMock()
+        asyncio.run(service.start_availability_flow(mock_context, session, chat_id=456))
+        assert mock_context.user_data["state"] == "waiting_for_availability_item_name"
+        service.bot.send_message.assert_called_once()
+        text = service.bot.send_message.call_args[0][1]
+        assert "item name" in text.lower() or "name" in text.lower()
