@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     # Validation settings
     min_len_str: int = Field(default=1, description="Minimum string length")
     max_len_str: int = Field(default=255, description="Maximum string length")
+    max_item_amount: int = Field(default=1_000_000, ge=1, description="Maximum allowed item amount")
+    max_item_price: float = Field(default=999_999.99, ge=0, description="Maximum allowed item price")
     skip_working_hours: bool = Field(default=True, description="Skip working hours check")
     
     # Database settings

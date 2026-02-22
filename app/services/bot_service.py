@@ -57,21 +57,7 @@ class BotService:
         clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         logger.info("Command /menu chat_id=%s", chat_id)
-        keyboard = [
-            [
-                InlineKeyboardButton('Get', callback_data='Get'),
-                InlineKeyboardButton('Add', callback_data='Add'),
-            ],
-            [
-                InlineKeyboardButton('Admin', callback_data='Admin'),
-                InlineKeyboardButton('Change availability status', callback_data='availability_status'),
-            ],
-            [
-                InlineKeyboardButton('Send test message', callback_data='Send test message'),
-                InlineKeyboardButton('Stop', callback_data='stop_bot'),
-            ],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = self._menu_inline_keyboard()
         msg = update.effective_message
         if msg:
             await msg.reply_text(
@@ -120,14 +106,27 @@ class BotService:
         item_data = context.user_data.get('item_data', {})
         
         if state == 'waiting_for_item_name':
-            if not validate_text_input(update.message.text):
+            raw = update.message.text
+            if raw is None:
+                return None
+            name = raw.strip()
+            if not name:
                 await update.message.reply_text(
-                    'Invalid name. Please use letters and numbers.\nOr /cancel to cancel.',
+                    'Item name cannot be empty.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return None
+            min_len = self.settings.min_len_str
+            max_len = self.settings.max_len_str
+            if not validate_text_input(name, min_len=min_len, max_len=max_len):
+                await update.message.reply_text(
+                    f'Invalid name. Use letters, numbers, or common symbols. '
+                    f'Length must be between {min_len} and {max_len} characters.\nOr /cancel to cancel.',
                     reply_markup=ForceReply(selective=True),
                 )
                 return None
 
-            item_data['item_name'] = update.message.text.upper()
+            item_data['item_name'] = name
             context.user_data['state'] = 'waiting_for_item_amount'
             await update.message.reply_text(
                 'Please provide amount of items.\nOr /cancel to cancel.',
@@ -136,14 +135,29 @@ class BotService:
             return None
 
         elif state == 'waiting_for_item_amount':
-            if not is_int(update.message.text):
+            raw_amount = update.message.text
+            if not is_int(raw_amount):
                 await update.message.reply_text(
                     'Invalid amount. Please enter a whole number.\nOr /cancel to cancel.',
                     reply_markup=ForceReply(selective=True),
                 )
                 return None
+            amount = int(raw_amount)
+            max_amount = self.settings.max_item_amount
+            if amount < 1:
+                await update.message.reply_text(
+                    'Amount must be at least 1.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return None
+            if amount > max_amount:
+                await update.message.reply_text(
+                    f'Amount must be at most {max_amount:,}.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return None
 
-            item_data['item_amount'] = int(update.message.text)
+            item_data['item_amount'] = amount
             context.user_data['state'] = 'waiting_for_item_type'
             type_buttons = self._item_type_keyboard()
             await update.message.reply_text(
@@ -171,14 +185,29 @@ class BotService:
             return None
 
         elif state == 'waiting_for_item_price':
-            if not is_float(update.message.text):
+            raw_price = update.message.text
+            if not is_float(raw_price):
                 await update.message.reply_text(
                     'Invalid price. Please enter a number.\nOr /cancel to cancel.',
                     reply_markup=ForceReply(selective=True),
                 )
                 return None
+            price = round(float(raw_price), 2)
+            max_price = self.settings.max_item_price
+            if price < 0:
+                await update.message.reply_text(
+                    'Price cannot be negative.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return None
+            if price > max_price:
+                await update.message.reply_text(
+                    f'Price must be at most {max_price:,.2f}.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return None
 
-            item_data['item_price'] = float(update.message.text)
+            item_data['item_price'] = price
             context.user_data['state'] = 'waiting_for_availability'
             avail_buttons = InlineKeyboardMarkup.from_row([
                 InlineKeyboardButton('Yes', callback_data='item_availability_yes'),
@@ -268,12 +297,68 @@ class BotService:
                 text += f'Availability: {item.availability}\n'
             await self.bot.send_message(chat_id, text)
             logger.info("Item created id=%s chat_id=%s", item.id, chat_id)
+            # Offer to add another or go back to menu
+            next_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton('Add another item', callback_data='add_another')],
+                [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+            ])
+            await self.bot.send_message(
+                chat_id,
+                'What would you like to do next?',
+                reply_markup=next_keyboard,
+            )
             return item_create
         except Exception as e:
             logger.error("Error creating item: %s", type(e).__name__, exc_info=True)
             await self.bot.send_message(chat_id, "Failed to process the request. Please try again later.")
             return None
-    
+
+    async def start_add_item_flow(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> None:
+        """Start Add item flow from a chat (e.g. after 'Add another item' callback)."""
+        if not check_working_hours():
+            await self.bot.send_message(
+                chat_id,
+                'You are trying to send request outside of working hours - please try again later.',
+            )
+            return
+        context.user_data['state'] = 'waiting_for_item_name'
+        context.user_data['item_data'] = {}
+        await self.bot.send_message(
+            chat_id,
+            'Please provide name of item.\nOr /cancel to cancel.',
+            reply_markup=ForceReply(selective=True),
+        )
+
+    def _menu_inline_keyboard(self) -> InlineKeyboardMarkup:
+        """Build the main menu inline keyboard (shared by send_menu and send_menu_to_chat)."""
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton('Get', callback_data='Get'),
+                InlineKeyboardButton('Add', callback_data='Add'),
+            ],
+            [
+                InlineKeyboardButton('Admin', callback_data='Admin'),
+                InlineKeyboardButton('Change availability status', callback_data='availability_status'),
+            ],
+            [
+                InlineKeyboardButton('Send test message', callback_data='Send test message'),
+                InlineKeyboardButton('Stop', callback_data='stop_bot'),
+            ],
+        ])
+
+    async def send_menu_to_chat(self, chat_id: int) -> None:
+        """Send the main menu inline keyboard to a chat (e.g. after 'Back to menu')."""
+        await self.bot.send_message(
+            chat_id,
+            'What you want to do?',
+            reply_markup=self._menu_inline_keyboard(),
+        )
+
     async def get_items(
         self,
         update: Update,
@@ -339,7 +424,24 @@ class BotService:
         state = context.user_data.get('state')
         
         if state == 'waiting_for_availability_item_name':
-            item_name = update.message.text.upper()
+            raw = update.message.text
+            if raw is None:
+                return
+            item_name = raw.strip()
+            if not item_name:
+                await update.message.reply_text(
+                    'Item name cannot be empty.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            min_len = self.settings.min_len_str
+            max_len = self.settings.max_len_str
+            if not validate_text_input(item_name, min_len=min_len, max_len=max_len):
+                await update.message.reply_text(
+                    f'Invalid name. Length must be between {min_len} and {max_len} characters.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
             context.user_data['availability_item_name'] = item_name
             context.user_data['state'] = 'waiting_for_availability_status'
             status_buttons = InlineKeyboardMarkup.from_row([

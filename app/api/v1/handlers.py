@@ -130,6 +130,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await bot_service.bot.send_message(chat_id, _expired_msg)
         return
+    if chat_id is not None and query.data == 'add_another':
+        await bot_service.start_add_item_flow(context, db_session, chat_id)
+        return
+    if chat_id is not None and query.data == 'show_menu':
+        await bot_service.send_menu_to_chat(chat_id)
+        return
 
     if query.data == 'Add':
         await bot_service.handle_add_item(update, context, db_session)
@@ -155,7 +161,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     db_session = context.bot_data.get('current_db_session')
 
     if state and bot_service and state.startswith('waiting_for'):
-        # Handle multi-step input (do not log message text)
+        # Handle multistep input (do not log message text)
         logger.debug("Text message in state flow update_id=%s state=%s", update.update_id, state)
         if state in ('waiting_for_availability_item_name', 'waiting_for_availability_status'):
             await bot_service.process_availability_update(update, context, db_session)
