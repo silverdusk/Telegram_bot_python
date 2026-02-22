@@ -126,10 +126,11 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if state and bot_service:
         # Handle multi-step input (do not log message text)
+        # Route by state: availability-update flow has distinct state names; item flow uses waiting_for_availability (yes/no) for the new item
         logger.debug("Text message in state flow update_id=%s state=%s", update.update_id, state)
         if state.startswith('waiting_for'):
-            if 'item' in state:
-                await bot_service.process_item_input(update, context, db_session)
-            elif 'availability' in state:
+            if state in ('waiting_for_availability_item_name', 'waiting_for_availability_status'):
                 await bot_service.process_availability_update(update, context, db_session)
+            else:
+                await bot_service.process_item_input(update, context, db_session)
 
