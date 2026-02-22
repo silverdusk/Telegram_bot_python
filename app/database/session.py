@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.core.config import get_settings
 from database.models import Base, Role
 
@@ -28,6 +28,8 @@ def init_db() -> None:
         settings.database.db_url,
         echo=settings.debug,
         future=True,
+        pool_size=settings.database.pool_size,
+        max_overflow=settings.database.max_overflow,
     )
     async_session_maker = async_sessionmaker(
         engine,
@@ -72,6 +74,30 @@ async def create_tables() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created")
+
+
+# Index definitions (CREATE INDEX IF NOT EXISTS — safe to run on every startup)
+_ORGANIZER_INDEXES_SQL = """
+CREATE INDEX IF NOT EXISTS idx_organizer_chat_timestamp
+  ON organizer_table (chat_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_organizer_chat_name
+  ON organizer_table (chat_id, item_name);
+CREATE INDEX IF NOT EXISTS idx_organizer_created_by_user_id
+  ON organizer_table (created_by_user_id)
+  WHERE created_by_user_id IS NOT NULL;
+"""
+
+
+async def ensure_indexes() -> None:
+    """Ensure performance indexes exist on organizer_table. Idempotent (IF NOT EXISTS)."""
+    if engine is None:
+        init_db()
+    async with engine.begin() as conn:
+        for stmt in _ORGANIZER_INDEXES_SQL.strip().split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                await conn.execute(text(stmt))
+    logger.info("Database indexes ensured")
 
 
 async def seed_roles() -> None:

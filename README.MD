@@ -136,7 +136,7 @@ Main variables (env or `config.json`):
 | Variable | Description |
 |----------|-------------|
 | `BOT_TOKEN` | Telegram bot token (required) |
-| `DATABASE__*` or `DATABASE` | DB name, user, password, host, port, table_name |
+| `DATABASE__*` or `DATABASE` | DB name, user, password, host, port, table_name; optional `DATABASE__POOL_SIZE` (default 5), `DATABASE__MAX_OVERFLOW` (default 10) |
 | `AUTHORIZED_IDS` | Fallback admin Telegram user IDs when user not in DB or DB unavailable (JSON array). Also used for Stop if `FALLBACK_ADMIN_IDS` is not set. |
 | `FALLBACK_ADMIN_IDS` | Optional; JSON array of Telegram user IDs used as fallback admins; if set, overrides `AUTHORIZED_IDS` for role resolution. |
 | `ENCRYPTION_KEY` | Required; base64 Fernet key for encrypting user data. Generate with: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
@@ -210,6 +210,11 @@ Encryption tests (`test_encryption.py`) are skipped if the `cryptography` packag
    - `DATABASE__HOST=localhost` (or `db` in Docker)
    - `DATABASE__PORT=5432`
    - `DATABASE__TABLE_NAME=organizer_table`
+
+4. **Indexes**  
+   The app ensures performance indexes on `organizer_table` on every startup (`ensure_indexes`). No extra step needed on deploy or redeploy — they are created automatically and idempotently (IF NOT EXISTS). You can also run the SQL by hand: `psql -U botuser -d telegram_bot -f SQL_queries/Add_indexes.sql`.
+
+   **How indexes work:** Indexes are stored in the database (not in app code). They speed up queries by letting PostgreSQL find rows by `chat_id`, `(chat_id, timestamp)`, or `(chat_id, item_name)` without scanning the whole table. Once created, they persist across app restarts and redeploys. The app runs `CREATE INDEX IF NOT EXISTS` on startup so indexes are created if missing and left as-is if they already exist.
 
 For a more detailed PostgreSQL and pgAdmin setup, see the previous version of this README or your deployment notes.
 

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
-from app.database.session import init_db, close_db, create_tables, seed_roles
+from app.database.session import init_db, close_db, create_tables, seed_roles, ensure_indexes
 from app.api.v1 import webhook
 from app.api.v1.webhook import get_bot_application
 
@@ -34,7 +34,10 @@ async def lifespan(app: FastAPI):
     if settings.create_tables_on_startup:
         await create_tables()
         await seed_roles()
+        await ensure_indexes()
         logger.info("Database tables created")
+    else:
+        await ensure_indexes()
     logger.info("Database initialized")
 
     # Initialize Telegram bot application (webhook mode)

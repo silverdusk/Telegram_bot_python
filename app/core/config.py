@@ -14,6 +14,8 @@ class DatabaseSettings(BaseSettings):
     host: str = Field(default="localhost", description="Database host")
     port: int = Field(default=5432, description="Database port")
     table_name: str = Field(..., description="Database table name")
+    pool_size: int = Field(default=5, ge=1, le=100, description="SQLAlchemy connection pool size")
+    max_overflow: int = Field(default=10, ge=0, le=100, description="SQLAlchemy pool max overflow")
     
     @property
     def db_url(self) -> str:
