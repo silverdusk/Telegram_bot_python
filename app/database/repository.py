@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, update, delete, and_
 from sqlalchemy.orm import selectinload
 from database.models import Item
 from app.schemas.item import ItemCreate, ItemUpdate
@@ -108,7 +108,21 @@ class ItemRepository:
             logger.error(f"Error updating availability: {e}")
             await self.session.rollback()
             raise
-    
+
+    async def delete_by_name_and_chat(self, item_name: str, chat_id: int) -> int:
+        """Delete all items matching item_name (case-insensitive) for the given chat_id. Returns number of rows deleted."""
+        try:
+            result = await self.session.execute(
+                delete(Item).where(Item.chat_id == chat_id).where(Item.item_name.ilike(item_name))
+            )
+            await self.session.flush()
+            logger.info("Deleted %s item(s) for chat_id=%s name=%s", result.rowcount, chat_id, item_name)
+            return result.rowcount or 0
+        except Exception as e:
+            logger.error("Error deleting item: %s", e)
+            await self.session.rollback()
+            raise
+
     async def update_item(
         self,
         item_id: int,

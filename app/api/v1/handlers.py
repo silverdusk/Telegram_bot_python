@@ -40,7 +40,11 @@ def register_handlers(application: Application, bot_service: BotService) -> None
     async def handle_availability(u, c):
         db = c.bot_data.get('current_db_session')
         await bot_service.update_availability_status(u, c, db)
-    
+
+    async def handle_remove(u, c):
+        db = c.bot_data.get('current_db_session')
+        await bot_service.handle_remove_item(u, c, db)
+
     application.add_handler(
         MessageHandler(
             filters.Regex("^[Aa]dd$") | filters.Regex("^Add$"),
@@ -71,7 +75,13 @@ def register_handlers(application: Application, bot_service: BotService) -> None
             handle_availability,
         )
     )
-    
+    application.add_handler(
+        MessageHandler(
+            filters.Regex("^Remove item$"),
+            handle_remove,
+        )
+    )
+
     # Callback query handlers
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     
@@ -141,6 +151,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await bot_service.handle_add_item(update, context, db_session)
     elif query.data == 'Get':
         await bot_service.get_items(update, context, db_session)
+    elif query.data == 'remove_item':
+        await bot_service.handle_remove_item(update, context, db_session)
     elif query.data == 'Admin':
         await bot_service.handle_admin(update, context)
     elif query.data == 'Send test message':
@@ -165,6 +177,8 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.debug("Text message in state flow update_id=%s state=%s", update.update_id, state)
         if state in ('waiting_for_availability_item_name', 'waiting_for_availability_status'):
             await bot_service.process_availability_update(update, context, db_session)
+        elif state == 'waiting_for_remove_item_name':
+            await bot_service.process_remove_item(update, context, db_session)
         else:
             await bot_service.process_item_input(update, context, db_session)
     else:

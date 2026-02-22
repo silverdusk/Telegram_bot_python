@@ -7,9 +7,9 @@ A Telegram bot for item management: add items, list them, and update availabilit
 
 ## Features
 
-- **Item management**: Add items (name, amount, type, price, availability), get list of your items, change availability by item name.
-- **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`.
-- **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Admin, Change availability, Send test message, Stop).
+- **Item management**: Add items (name, amount, type, price, availability), get list of your items, **remove items by name**, change availability by item name.
+- **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`. Remove-item flow: enter name → items matching that name (for the current chat) are deleted.
+- **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Remove item, Admin, Change availability, Send test message, Stop).
 - **Validation**: Length and character rules for names; amount/price range checks; working-hours check for Add (configurable).
 - **Authorization**: Stop command restricted to configured user IDs.
 - **Logging**: Structured logging (no secrets or user content in logs).
@@ -27,9 +27,9 @@ app/
     validators.py     # validate_text_input, is_int, is_float, check_working_hours
   database/
     session.py        # Async engine, session
-    repository.py     # Item CRUD
+    repository.py     # Item CRUD (incl. delete_by_name_and_chat)
   services/
-    bot_service.py    # Bot logic: welcome, menu, add/get/availability, keyboards
+    bot_service.py    # Bot logic: welcome, menu, add/get/remove/availability, keyboards
   schemas/
     item.py           # ItemCreate, ItemResponse, ItemUpdate
 database/             # Legacy DB layer (optional)
@@ -37,7 +37,8 @@ bot/                  # Legacy Telebot-based bot (optional)
 tests/
   conftest.py         # Fixtures (mock_settings, mock_bot, mock_context)
   test_validators.py  # Validators
-  test_app_bot_service.py  # clear_flow_state, keyboards
+  test_app_bot_service.py  # clear_flow_state, keyboards, handle_remove_item, process_remove_item
+  test_app_repository.py   # delete_by_name_and_chat
   test_schemas.py     # ItemCreate, ItemUpdate
 ```
 
@@ -144,7 +145,7 @@ See `.env.example` for a full list.
 ## Tests
 
 ```bash
-poetry run python -m pytest tests/test_validators.py tests/test_app_bot_service.py tests/test_schemas.py -v
+poetry run python -m pytest tests/test_validators.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_schemas.py -v
 ```
 
 Run all tests:

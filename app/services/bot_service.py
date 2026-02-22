@@ -38,6 +38,7 @@ class BotService:
         logger.info("Command /start chat_id=%s", chat_id)
         keyboard = [
             [KeyboardButton('Get'), KeyboardButton('Add')],
+            [KeyboardButton('Remove item')],
             [KeyboardButton('Admin'), KeyboardButton('Send test message')],
             [KeyboardButton('Change availability status')],
         ]
@@ -341,6 +342,7 @@ class BotService:
                 InlineKeyboardButton('Get', callback_data='Get'),
                 InlineKeyboardButton('Add', callback_data='Add'),
             ],
+            [InlineKeyboardButton('Remove item', callback_data='remove_item')],
             [
                 InlineKeyboardButton('Admin', callback_data='Admin'),
                 InlineKeyboardButton('Change availability status', callback_data='availability_status'),
@@ -394,7 +396,70 @@ class BotService:
         except Exception as e:
             logger.error("Error getting items: %s", type(e).__name__, exc_info=True)
             await msg.reply_text("An error occurred. Please try again later.")
-    
+
+    async def handle_remove_item(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """Start Remove item flow: ask for item name."""
+        clear_flow_state(context)
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        msg = update.effective_message
+        if not msg:
+            return
+        logger.info("Remove item flow started chat_id=%s", chat_id)
+        context.user_data['state'] = 'waiting_for_remove_item_name'
+        await msg.reply_text(
+            'Please provide the name of the item to remove.\nOr /cancel to cancel.',
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def process_remove_item(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """Process item name and delete matching items for this chat."""
+        state = context.user_data.get('state')
+        if state != 'waiting_for_remove_item_name':
+            return
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        if not update.message or not update.message.text or session is None or not chat_id:
+            return
+        raw = update.message.text.strip()
+        if not raw:
+            await update.message.reply_text(
+                'Item name cannot be empty.\nOr /cancel to cancel.',
+                reply_markup=ForceReply(selective=True),
+            )
+            return
+        min_len = self.settings.min_len_str
+        max_len = self.settings.max_len_str
+        if not validate_text_input(raw, min_len=min_len, max_len=max_len):
+            await update.message.reply_text(
+                f'Invalid name. Length must be between {min_len} and {max_len} characters.\nOr /cancel to cancel.',
+                reply_markup=ForceReply(selective=True),
+            )
+            return
+        try:
+            repository = ItemRepository(session)
+            deleted = await repository.delete_by_name_and_chat(raw, chat_id)
+            context.user_data.pop('state', None)
+            if deleted > 0:
+                await update.message.reply_text(
+                    f'Removed {deleted} item(s) named "{raw}".'
+                )
+                logger.info("Remove item: deleted=%s chat_id=%s name=%s", deleted, chat_id, raw)
+            else:
+                await update.message.reply_text(f'No items found with that name ("{raw}").')
+                logger.info("Remove item: none found chat_id=%s name=%s", chat_id, raw)
+        except Exception as e:
+            logger.error("Error removing item: %s", type(e).__name__, exc_info=True)
+            await update.message.reply_text("An error occurred. Please try again later.")
+
     async def update_availability_status(
         self,
         update: Update,
