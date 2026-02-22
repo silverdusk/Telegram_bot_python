@@ -17,16 +17,23 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def clear_flow_state(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Clear any ongoing flow state so user starts from a clean slate."""
+    for key in ('state', 'item_data', 'availability_item_name'):
+        context.user_data.pop(key, None)
+
+
 class BotService:
     """Service for handling Telegram bot operations."""
-    
+
     def __init__(self, bot: Bot):
         """Initialize bot service."""
         self.bot = bot
         self.settings = get_settings()
-    
+
     async def send_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send welcome message with keyboard."""
+        clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         logger.info("Command /start chat_id=%s", chat_id)
         keyboard = [
@@ -37,13 +44,15 @@ class BotService:
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
         await update.message.reply_text(
-            "Hi! :)\nI'm organizer bot. I will help you to add your items.",
+            "Hi! :)\nI'm organizer bot. I will help you to add your items.\n"
+            "You can also use /menu for the same actions in a compact menu.",
             reply_markup=reply_markup,
         )
         logger.info("Welcome message sent chat_id=%s", chat_id)
-    
+
     async def send_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send menu with inline keyboard."""
+        clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         logger.info("Command /menu chat_id=%s", chat_id)
         keyboard = [
@@ -75,6 +84,7 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Handle add item command."""
+        clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         logger.info("Add item flow started chat_id=%s", chat_id)
         if not check_working_hours():
@@ -89,10 +99,10 @@ class BotService:
         context.user_data['item_data'] = {}
 
         await update.message.reply_text(
-            'Please provide name of item:',
+            'Please provide name of item.\nOr /cancel to cancel.',
             reply_markup=ForceReply(selective=True),
         )
-    
+
     async def process_item_input(
         self,
         update: Update,
@@ -106,96 +116,141 @@ class BotService:
         if state == 'waiting_for_item_name':
             if not validate_text_input(update.message.text):
                 await update.message.reply_text(
-                    f'{update.message.text} is invalid.\nPlease provide item name:',
+                    'Invalid name. Please use letters and numbers.\nOr /cancel to cancel.',
                     reply_markup=ForceReply(selective=True),
                 )
                 return None
-            
+
             item_data['item_name'] = update.message.text.upper()
             context.user_data['state'] = 'waiting_for_item_amount'
             await update.message.reply_text(
-                'Please provide amount of items:',
+                'Please provide amount of items.\nOr /cancel to cancel.',
                 reply_markup=ForceReply(selective=True),
             )
             return None
-        
+
         elif state == 'waiting_for_item_amount':
             if not is_int(update.message.text):
                 await update.message.reply_text(
-                    f'{update.message.text} is invalid.\nPlease provide item amount:',
+                    'Invalid amount. Please enter a whole number.\nOr /cancel to cancel.',
                     reply_markup=ForceReply(selective=True),
                 )
                 return None
-            
+
             item_data['item_amount'] = int(update.message.text)
             context.user_data['state'] = 'waiting_for_item_type'
+            type_buttons = self._item_type_keyboard()
             await update.message.reply_text(
-                'Please provide item type:',
-                reply_markup=ForceReply(selective=True),
+                'Please choose item type.\nOr /cancel to cancel.',
+                reply_markup=type_buttons,
             )
             return None
-        
+
         elif state == 'waiting_for_item_type':
             item_type = update.message.text.lower()
             if item_type not in [t.lower() for t in self.settings.allowed_types]:
                 allowed = " or ".join(self.settings.allowed_types)
                 await update.message.reply_text(
-                    f'{update.message.text} is not allowed item type.'
-                    f' Allowed Items Types are: {allowed}.\nPlease provide item type:',
-                    reply_markup=ForceReply(selective=True),
+                    f'Invalid type. Allowed: {allowed}. Please choose below or type again:',
+                    reply_markup=self._item_type_keyboard(),
                 )
                 return None
-            
+
             item_data['item_type'] = item_type
             context.user_data['state'] = 'waiting_for_item_price'
             await update.message.reply_text(
-                'Please provide item price value:',
+                'Please provide item price value.\nOr /cancel to cancel.',
                 reply_markup=ForceReply(selective=True),
             )
             return None
-        
+
         elif state == 'waiting_for_item_price':
             if not is_float(update.message.text):
                 await update.message.reply_text(
-                    f'{update.message.text} is invalid.\nPlease provide item price value:',
+                    'Invalid price. Please enter a number.\nOr /cancel to cancel.',
                     reply_markup=ForceReply(selective=True),
                 )
                 return None
-            
+
             item_data['item_price'] = float(update.message.text)
             context.user_data['state'] = 'waiting_for_availability'
+            avail_buttons = InlineKeyboardMarkup.from_row([
+                InlineKeyboardButton('Yes', callback_data='item_availability_yes'),
+                InlineKeyboardButton('No', callback_data='item_availability_no'),
+            ])
             await update.message.reply_text(
-                'Please provide availability status (yes/no):',
-                reply_markup=ForceReply(selective=True),
+                'Is this item available?\nOr /cancel to cancel.',
+                reply_markup=avail_buttons,
             )
             return None
         
         elif state == 'waiting_for_availability':
             availability_text = update.message.text.lower()
             if availability_text not in ['yes', 'no']:
+                avail_buttons = InlineKeyboardMarkup.from_row([
+                    InlineKeyboardButton('Yes', callback_data='item_availability_yes'),
+                    InlineKeyboardButton('No', callback_data='item_availability_no'),
+                ])
                 await update.message.reply_text(
-                    'Incorrect value, must be yes/no',
-                    reply_markup=ForceReply(selective=True),
+                    'Please choose Yes or No:',
+                    reply_markup=avail_buttons,
                 )
                 return None
-            
+
             item_data['availability'] = availability_text == 'yes'
-            
-        # Create item
+
+        # Create item (shared path for text and button choice)
         if session is None:
             await update.message.reply_text("Database session not available. Please try again.")
             return None
-        
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        return await self._finish_add_item(context, session, chat_id)
+
+    def _item_type_keyboard(self) -> InlineKeyboardMarkup:
+        """Inline keyboard for item type choice (fixed options)."""
+        buttons = [
+            InlineKeyboardButton(t, callback_data=f'item_type_{t}')
+            for t in self.settings.allowed_types
+        ]
+        return InlineKeyboardMarkup.from_row(buttons)
+
+    async def advance_after_item_type(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+        item_type: str,
+    ) -> None:
+        """Continue Add flow after user chose item type via button. Sends next prompt."""
+        context.user_data['item_data'] = context.user_data.get('item_data', {})
+        context.user_data['item_data']['item_type'] = item_type.lower()
+        context.user_data['state'] = 'waiting_for_item_price'
+        await self.bot.send_message(
+            chat_id,
+            'Please provide item price value:',
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def _finish_add_item(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> Optional[ItemCreate]:
+        """Create item from context.user_data['item_data'], clear state, send confirmation."""
+        if session is None:
+            await self.bot.send_message(chat_id, "Database session not available. Please try again.")
+            return None
+        item_data = context.user_data.get('item_data', {})
+        if not item_data:
+            await self.bot.send_message(chat_id, "No item data. Please start over with Add.")
+            return None
         try:
             item_create = ItemCreate(**item_data)
             repository = ItemRepository(session)
-            item = await repository.create_item(item_create, update.effective_chat.id)
-            
-            # Clear state
+            item = await repository.create_item(item_create, chat_id)
             context.user_data.pop('state', None)
             context.user_data.pop('item_data', None)
-            
-            # Send confirmation
             text = (
                 f'Request is placed for processing:\n'
                 f'Item name: {item.item_name}\n'
@@ -205,16 +260,13 @@ class BotService:
             if item.item_type == 'spare part':
                 text += f'Item price: {item.item_price}\n'
                 text += f'Availability: {item.availability}\n'
-            
-            await update.message.reply_text(text)
-            logger.info("Item created id=%s chat_id=%s", item.id, update.effective_chat.id)
+            await self.bot.send_message(chat_id, text)
+            logger.info("Item created id=%s chat_id=%s", item.id, chat_id)
             return item_create
         except Exception as e:
             logger.error("Error creating item: %s", type(e).__name__, exc_info=True)
-            await update.message.reply_text("Failed to process the request. Please try again later.")
+            await self.bot.send_message(chat_id, "Failed to process the request. Please try again later.")
             return None
-        
-        return None
     
     async def get_items(
         self,
@@ -223,6 +275,7 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Get items from database."""
+        clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         if session is None:
             await update.message.reply_text("Database session not available. Please try again.")
@@ -255,11 +308,12 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Handle availability status update."""
+        clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         logger.info("Availability update flow started chat_id=%s", chat_id)
         context.user_data['state'] = 'waiting_for_availability_item_name'
         await update.message.reply_text(
-            'Please provide item name:',
+            'Please provide item name.\nOr /cancel to cancel.',
             reply_markup=ForceReply(selective=True),
         )
     
@@ -276,24 +330,32 @@ class BotService:
             item_name = update.message.text.upper()
             context.user_data['availability_item_name'] = item_name
             context.user_data['state'] = 'waiting_for_availability_status'
+            status_buttons = InlineKeyboardMarkup.from_row([
+                InlineKeyboardButton('YES', callback_data='avail_status_yes'),
+                InlineKeyboardButton('NO', callback_data='avail_status_no'),
+            ])
             await update.message.reply_text(
-                'Please provide availability status YES/NO:',
-                reply_markup=ForceReply(selective=True),
+                'Set availability for this item.\nOr /cancel to cancel.',
+                reply_markup=status_buttons,
             )
-        
+
         elif state == 'waiting_for_availability_status':
             status_text = update.message.text.upper()
             item_name = context.user_data.get('availability_item_name')
             
             if status_text not in ['YES', 'NO']:
+                status_buttons = InlineKeyboardMarkup.from_row([
+                    InlineKeyboardButton('YES', callback_data='avail_status_yes'),
+                    InlineKeyboardButton('NO', callback_data='avail_status_no'),
+                ])
                 await update.message.reply_text(
-                    'Incorrect value, must be YES/NO',
-                    reply_markup=ForceReply(selective=True),
+                    'Please choose YES or NO:',
+                    reply_markup=status_buttons,
                 )
                 return
-            
+
             availability = status_text == 'YES'
-            
+
             if session is None:
                 await update.message.reply_text("Database session not available. Please try again.")
                 return
@@ -319,6 +381,42 @@ class BotService:
             except Exception as e:
                 logger.error("Error updating availability: %s", type(e).__name__, exc_info=True)
                 await update.message.reply_text("An error occurred. Please try again later.")
+
+    async def apply_availability_status_choice(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+        availability: bool,
+    ) -> None:
+        """Apply availability choice from Change availability flow (button)."""
+        item_name = context.user_data.get('availability_item_name')
+        if not item_name:
+            await self.bot.send_message(chat_id, "Session expired. Please start over with Change availability status.")
+            context.user_data.pop('state', None)
+            context.user_data.pop('availability_item_name', None)
+            return
+        if session is None:
+            await self.bot.send_message(chat_id, "Database session not available. Please try again.")
+            return
+        try:
+            repository = ItemRepository(session)
+            updated = await repository.update_availability(item_name, availability)
+            context.user_data.pop('state', None)
+            context.user_data.pop('availability_item_name', None)
+            if updated:
+                await self.bot.send_message(
+                    chat_id,
+                    f'Availability updated.\nItem: {item_name}.\n'
+                    f'Availability: {"available" if availability else "not available"}',
+                )
+                logger.info("Availability updated chat_id=%s", chat_id)
+            else:
+                await self.bot.send_message(chat_id, f'Item "{item_name}" not found.')
+                logger.info("Availability update: item not found chat_id=%s", chat_id)
+        except Exception as e:
+            logger.error("Error updating availability: %s", type(e).__name__, exc_info=True)
+            await self.bot.send_message(chat_id, "An error occurred. Please try again later.")
     
     async def send_test_message(
         self,
@@ -327,6 +425,7 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Send test/demo message."""
+        clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         if session is None:
             await update.message.reply_text("Database session not available. Please try again.")
@@ -361,6 +460,7 @@ class BotService:
 
     async def handle_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle admin command (placeholder)."""
+        clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         logger.info("Admin menu shown chat_id=%s", chat_id)
         await update.message.reply_photo(
@@ -377,14 +477,18 @@ class BotService:
         """Stop bot (authorized users only)."""
         chat_id = update.effective_chat.id
         if chat_id not in self.settings.authorized_ids:
-            await update.message.reply_text(
-                f"Your ID ({chat_id}) is not authorized to stop bot"
-            )
+            await update.message.reply_text("You are not authorized to use this command.")
             logger.warning("Unauthorized stop attempt chat_id=%s", chat_id)
             return
 
         logger.info("Stop command from authorized user chat_id=%s", chat_id)
-        await update.message.reply_text("Stopping bot...")
-        # Note: In webhook mode, we don't stop polling, we just log
+        await update.message.reply_text(
+            "Stop requested. In this setup the bot keeps running; your request has been logged."
+        )
         logger.info("Bot stop requested")
+
+    async def cancel_flow(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Cancel any ongoing flow and reply."""
+        clear_flow_state(context)
+        await update.message.reply_text("Cancelled. Use /menu or the buttons below to choose an action.")
 

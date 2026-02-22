@@ -21,6 +21,7 @@ def register_handlers(application: Application, bot_service: BotService) -> None
     # Command handlers
     application.add_handler(CommandHandler("start", bot_service.send_welcome))
     application.add_handler(CommandHandler("menu", bot_service.send_menu))
+    application.add_handler(CommandHandler("cancel", bot_service.cancel_flow))
     application.add_handler(CommandHandler("stop", bot_service.stop_bot))
     
     # Text message handlers
@@ -100,6 +101,35 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     db_session = context.bot_data.get('current_db_session')
+    chat_id = query.message.chat_id if query.message else None
+
+    # Flow callbacks: fixed-option choices in multi-step flows
+    _expired_msg = "This action has expired. Please start over with Add or Change availability status."
+    if chat_id is not None and query.data.startswith('item_type_'):
+        state = context.user_data.get('state')
+        if state == 'waiting_for_item_type':
+            item_type = query.data.replace('item_type_', '', 1)
+            await bot_service.advance_after_item_type(context, db_session, chat_id, item_type)
+        else:
+            await bot_service.bot.send_message(chat_id, _expired_msg)
+        return
+    if chat_id is not None and query.data in ('item_availability_yes', 'item_availability_no'):
+        state = context.user_data.get('state')
+        if state == 'waiting_for_availability':
+            context.user_data.setdefault('item_data', {})['availability'] = query.data == 'item_availability_yes'
+            await bot_service._finish_add_item(context, db_session, chat_id)
+        else:
+            await bot_service.bot.send_message(chat_id, _expired_msg)
+        return
+    if chat_id is not None and query.data in ('avail_status_yes', 'avail_status_no'):
+        state = context.user_data.get('state')
+        if state == 'waiting_for_availability_status':
+            await bot_service.apply_availability_status_choice(
+                context, db_session, chat_id, query.data == 'avail_status_yes'
+            )
+        else:
+            await bot_service.bot.send_message(chat_id, _expired_msg)
+        return
 
     if query.data == 'Add':
         await bot_service.handle_add_item(update, context, db_session)
@@ -116,7 +146,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle text messages (for multi-step input)."""
+    """Handle text messages (for multi-step input or unhandled text)."""
     if update.message is None:
         return
 
@@ -124,13 +154,16 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     bot_service = context.bot_data.get('bot_service')
     db_session = context.bot_data.get('current_db_session')
 
-    if state and bot_service:
+    if state and bot_service and state.startswith('waiting_for'):
         # Handle multi-step input (do not log message text)
-        # Route by state: availability-update flow has distinct state names; item flow uses waiting_for_availability (yes/no) for the new item
         logger.debug("Text message in state flow update_id=%s state=%s", update.update_id, state)
-        if state.startswith('waiting_for'):
-            if state in ('waiting_for_availability_item_name', 'waiting_for_availability_status'):
-                await bot_service.process_availability_update(update, context, db_session)
-            else:
-                await bot_service.process_item_input(update, context, db_session)
+        if state in ('waiting_for_availability_item_name', 'waiting_for_availability_status'):
+            await bot_service.process_availability_update(update, context, db_session)
+        else:
+            await bot_service.process_item_input(update, context, db_session)
+    else:
+        # Unhandled text: no active flow or unknown state
+        await update.message.reply_text(
+            "I didn't understand. Use /menu or the buttons below to choose an action."
+        )
 
