@@ -27,21 +27,25 @@ class BotService:
     
     async def send_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send welcome message with keyboard."""
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        logger.info("Command /start chat_id=%s", chat_id)
         keyboard = [
             [KeyboardButton('Get'), KeyboardButton('Add')],
             [KeyboardButton('Admin'), KeyboardButton('Send test message')],
             [KeyboardButton('Change availability status')],
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        
+
         await update.message.reply_text(
             "Hi! :)\nI'm organizer bot. I will help you to add your items.",
             reply_markup=reply_markup,
         )
-        logger.info(f"Welcome message sent to chat {update.effective_chat.id}")
+        logger.info("Welcome message sent chat_id=%s", chat_id)
     
     async def send_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send menu with inline keyboard."""
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        logger.info("Command /menu chat_id=%s", chat_id)
         keyboard = [
             [
                 InlineKeyboardButton('Get', callback_data='Get'),
@@ -57,11 +61,12 @@ class BotService:
             ],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         await update.message.reply_text(
             'What you want to do?',
             reply_markup=reply_markup,
         )
+        logger.info("Menu sent chat_id=%s", chat_id)
     
     async def handle_add_item(
         self,
@@ -70,16 +75,19 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Handle add item command."""
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        logger.info("Add item flow started chat_id=%s", chat_id)
         if not check_working_hours():
             await update.message.reply_text(
                 'You are trying to send request outside of working hours - please try again later.'
             )
+            logger.info("Add item rejected (outside working hours) chat_id=%s", chat_id)
             return
-        
+
         # Store state for multi-step input
         context.user_data['state'] = 'waiting_for_item_name'
         context.user_data['item_data'] = {}
-        
+
         await update.message.reply_text(
             'Please provide name of item:',
             reply_markup=ForceReply(selective=True),
@@ -199,10 +207,10 @@ class BotService:
                 text += f'Availability: {item.availability}\n'
             
             await update.message.reply_text(text)
-            logger.info(f"Item created: {item.id}")
+            logger.info("Item created id=%s chat_id=%s", item.id, update.effective_chat.id)
             return item_create
         except Exception as e:
-            logger.error(f"Error creating item: {e}")
+            logger.error("Error creating item: %s", type(e).__name__, exc_info=True)
             await update.message.reply_text("Failed to process the request. Please try again later.")
             return None
         
@@ -215,25 +223,30 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Get items from database."""
+        chat_id = update.effective_chat.id if update.effective_chat else None
         if session is None:
             await update.message.reply_text("Database session not available. Please try again.")
+            logger.warning("Get items: no db session chat_id=%s", chat_id)
             return
-        
+
+        logger.info("Get items requested chat_id=%s", chat_id)
         try:
             repository = ItemRepository(session)
             items = await repository.get_items(chat_id=update.effective_chat.id, limit=50)
-            
+
             if items:
                 item_info = "\n".join([
                     f"Item: {item.item_name}, Amount: {item.item_amount}"
                     for item in items
                 ])
                 await update.message.reply_text(f"Items in the database:\n{item_info}")
+                logger.info("Get items returned count=%s chat_id=%s", len(items), chat_id)
             else:
                 await update.message.reply_text("No items found in the database.")
+                logger.info("Get items returned empty chat_id=%s", chat_id)
         except Exception as e:
-            logger.error(f"Error getting items: {e}")
-            await update.message.reply_text(f"An error occurred: {e}")
+            logger.error("Error getting items: %s", type(e).__name__, exc_info=True)
+            await update.message.reply_text("An error occurred. Please try again later.")
     
     async def update_availability_status(
         self,
@@ -242,6 +255,8 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Handle availability status update."""
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        logger.info("Availability update flow started chat_id=%s", chat_id)
         context.user_data['state'] = 'waiting_for_availability_item_name'
         await update.message.reply_text(
             'Please provide item name:',
@@ -293,15 +308,17 @@ class BotService:
                         f'Item {item_name}.\n'
                         f'Availability - {"available" if availability else "not available"}'
                     )
+                    logger.info("Availability updated chat_id=%s", update.effective_chat.id)
                 else:
                     await update.message.reply_text(f'Item {item_name} not found.')
-                
+                    logger.info("Availability update: item not found chat_id=%s", update.effective_chat.id)
+
                 # Clear state
                 context.user_data.pop('state', None)
                 context.user_data.pop('availability_item_name', None)
             except Exception as e:
-                logger.error(f"Error updating availability: {e}")
-                await update.message.reply_text(f"An error occurred: {e}")
+                logger.error("Error updating availability: %s", type(e).__name__, exc_info=True)
+                await update.message.reply_text("An error occurred. Please try again later.")
     
     async def send_test_message(
         self,
@@ -310,10 +327,12 @@ class BotService:
         session: AsyncSession | None,
     ) -> None:
         """Send test/demo message."""
+        chat_id = update.effective_chat.id if update.effective_chat else None
         if session is None:
             await update.message.reply_text("Database session not available. Please try again.")
             return
-        
+
+        logger.info("Test message requested chat_id=%s", chat_id)
         demo_item = ItemCreate(
             item_name='My Item',
             item_amount=1,
@@ -335,12 +354,15 @@ class BotService:
                 f'Availability: {item.availability}\n'
             )
             await update.message.reply_text(text)
+            logger.info("Test message sent chat_id=%s", chat_id)
         except Exception as e:
-            logger.error(f"Error sending test message: {e}")
+            logger.error("Error sending test message: %s", type(e).__name__, exc_info=True)
             await update.message.reply_text("Failed to process the request. Please try again later.")
-    
+
     async def handle_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle admin command (placeholder)."""
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        logger.info("Admin menu shown chat_id=%s", chat_id)
         await update.message.reply_photo(
             photo='https://cdn-icons-png.flaticon.com/512/249/249389.png',
             caption="We're working on it!",
@@ -358,10 +380,10 @@ class BotService:
             await update.message.reply_text(
                 f"Your ID ({chat_id}) is not authorized to stop bot"
             )
-            logger.warning(f"Unauthorized attempt to stop bot from chat {chat_id}")
+            logger.warning("Unauthorized stop attempt chat_id=%s", chat_id)
             return
-        
-        logger.info("Stopping bot...")
+
+        logger.info("Stop command from authorized user chat_id=%s", chat_id)
         await update.message.reply_text("Stopping bot...")
         # Note: In webhook mode, we don't stop polling, we just log
         logger.info("Bot stop requested")

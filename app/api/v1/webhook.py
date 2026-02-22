@@ -13,6 +13,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 
+
+def _update_kind(update: Update) -> str:
+    """Return update type for logging. Does not log message content or user data."""
+    if update.message is not None:
+        return "message"
+    if update.callback_query is not None:
+        return "callback_query"
+    if update.edited_message is not None:
+        return "edited_message"
+    return "unknown"
+
 # Global bot application instance
 bot_application: Application | None = None
 bot_service: BotService | None = None
@@ -69,34 +80,32 @@ async def telegram_webhook(
             raise HTTPException(status_code=403, detail="Invalid secret token")
     
     try:
-        # Get update from request body
+        logger.debug("Webhook request received")
         update_data = await request.json()
-        update = Update.de_json(update_data, None)
-        
-        if update is None:
-            logger.warning("Received invalid update")
-            return {"ok": False, "error": "Invalid update"}
-        
-        # Process update with bot application
+
+        # Get bot application first so we can deserialize the update with the bot instance
         app, _ = await get_bot_application()
-        
+        update = Update.de_json(update_data, app.bot)
+
+        if update is None:
+            logger.warning("Received invalid update (parse failed)")
+            return {"ok": False, "error": "Invalid update"}
+
+        kind = _update_kind(update)
+        logger.info("Processing update update_id=%s kind=%s", update.update_id, kind)
+
         # Process update (context is created automatically)
-        # We need to pass db session through update callback data
-        # Store in a temporary location that handlers can access
         app.bot_data['current_db_session'] = db
-        
-        # Process update
         await app.process_update(update)
-        
-        # Clean up
         app.bot_data.pop('current_db_session', None)
-        
-        logger.info(f"Processed update {update.update_id}")
+
+        logger.info("Processed update update_id=%s", update.update_id)
         return {"ok": True}
-    
+
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log type and message only; do not log request body or update content
+        logger.error("Error processing webhook: %s: %s", type(e).__name__, str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.get("/health")

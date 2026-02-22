@@ -90,15 +90,17 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     if query is None:
         return
-    
+
+    # Log callback action only (callback_data is fixed set: Get, Add, Admin, etc.)
+    logger.info("Callback query update_id=%s data=%s", update.update_id, query.data)
     await query.answer()
     bot_service = context.bot_data.get('bot_service')
     if bot_service is None:
         logger.error("Bot service not found in context")
         return
-    
+
     db_session = context.bot_data.get('current_db_session')
-    
+
     if query.data == 'Add':
         await bot_service.handle_add_item(update, context, db_session)
     elif query.data == 'Get':
@@ -117,13 +119,14 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Handle text messages (for multi-step input)."""
     if update.message is None:
         return
-    
+
     state = context.user_data.get('state')
     bot_service = context.bot_data.get('bot_service')
     db_session = context.bot_data.get('current_db_session')
-    
+
     if state and bot_service:
-        # Handle multi-step input
+        # Handle multi-step input (do not log message text)
+        logger.debug("Text message in state flow update_id=%s state=%s", update.update_id, state)
         if state.startswith('waiting_for'):
             if 'item' in state:
                 await bot_service.process_item_input(update, context, db_session)
