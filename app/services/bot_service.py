@@ -5,7 +5,7 @@ from telegram import Update, Bot, ReplyKeyboardMarkup, KeyboardButton, InlineKey
 from telegram.ext import ContextTypes
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.repository import ItemRepository
-from app.schemas.item import ItemCreate
+from app.schemas.item import ItemCreate, ItemUpdate
 from app.core.validators import (
     validate_text_input,
     is_int,
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def clear_flow_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Clear any ongoing flow state so user starts from a clean slate."""
-    for key in ('state', 'item_data', 'availability_item_name'):
+    for key in ('state', 'item_data', 'availability_item_name', 'update_item_id', 'update_data'):
         context.user_data.pop(key, None)
 
 
@@ -38,7 +38,7 @@ class BotService:
         logger.info("Command /start chat_id=%s", chat_id)
         keyboard = [
             [KeyboardButton('Get'), KeyboardButton('Add')],
-            [KeyboardButton('Remove item')],
+            [KeyboardButton('Remove item'), KeyboardButton('Update item')],
             [KeyboardButton('Admin'), KeyboardButton('Send test message')],
             [KeyboardButton('Change availability status')],
         ]
@@ -343,6 +343,7 @@ class BotService:
                 InlineKeyboardButton('Add', callback_data='Add'),
             ],
             [InlineKeyboardButton('Remove item', callback_data='remove_item')],
+            [InlineKeyboardButton('Update item', callback_data='update_item')],
             [
                 InlineKeyboardButton('Admin', callback_data='Admin'),
                 InlineKeyboardButton('Change availability status', callback_data='availability_status'),
@@ -459,6 +460,299 @@ class BotService:
         except Exception as e:
             logger.error("Error removing item: %s", type(e).__name__, exc_info=True)
             await update.message.reply_text("An error occurred. Please try again later.")
+
+    def _update_field_keyboard(self) -> InlineKeyboardMarkup:
+        """Inline keyboard for choosing which field to update or Done."""
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton('Name', callback_data='update_field_name'),
+                InlineKeyboardButton('Amount', callback_data='update_field_amount'),
+            ],
+            [
+                InlineKeyboardButton('Type', callback_data='update_field_type'),
+                InlineKeyboardButton('Price', callback_data='update_field_price'),
+            ],
+            [
+                InlineKeyboardButton('Availability', callback_data='update_field_availability'),
+                InlineKeyboardButton('Done', callback_data='update_field_done'),
+            ],
+        ])
+
+    async def handle_update_item(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """Start Update item flow: ask for item name."""
+        clear_flow_state(context)
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        msg = update.effective_message
+        if not msg:
+            return
+        logger.info("Update item flow started chat_id=%s", chat_id)
+        context.user_data['state'] = 'waiting_for_update_item_name'
+        context.user_data['update_data'] = {}
+        await msg.reply_text(
+            'Please provide the exact name of the item to update.\nOr /cancel to cancel.',
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def process_update_item(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """Process update-item flow: item name, then field values."""
+        state = context.user_data.get('state')
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        if not update.message or not update.message.text or session is None or not chat_id:
+            return
+
+        if state == 'waiting_for_update_item_name':
+            raw = update.message.text.strip()
+            if not raw:
+                await update.message.reply_text(
+                    'Item name cannot be empty.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            min_len = self.settings.min_len_str
+            max_len = self.settings.max_len_str
+            if not validate_text_input(raw, min_len=min_len, max_len=max_len):
+                await update.message.reply_text(
+                    f'Invalid name. Length must be between {min_len} and {max_len} characters.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            try:
+                repository = ItemRepository(session)
+                items = await repository.get_items(chat_id=chat_id, item_name=raw, limit=20)
+                exact = [i for i in items if i.item_name.strip().lower() == raw.strip().lower()]
+                if not exact:
+                    await update.message.reply_text(f'No item found with that name ("{raw}").')
+                    context.user_data.pop('state', None)
+                    context.user_data.pop('update_data', None)
+                    return
+                if len(exact) > 1:
+                    await update.message.reply_text(
+                        f'Multiple items with that name. Please remove duplicates or use a more specific name.'
+                    )
+                    context.user_data.pop('state', None)
+                    context.user_data.pop('update_data', None)
+                    return
+                item = exact[0]
+                context.user_data['update_item_id'] = item.id
+                context.user_data['state'] = 'waiting_for_update_field'
+                await update.message.reply_text(
+                    'What do you want to change? Choose a field or tap Done to save.',
+                    reply_markup=self._update_field_keyboard(),
+                )
+            except Exception as e:
+                logger.error("Error in update item (find): %s", type(e).__name__, exc_info=True)
+                await update.message.reply_text("An error occurred. Please try again later.")
+
+        elif state == 'waiting_for_update_field':
+            await update.message.reply_text(
+                'Please use the buttons below to choose a field to change, or tap Done.',
+                reply_markup=self._update_field_keyboard(),
+            )
+
+        elif state == 'waiting_for_update_name':
+            raw = update.message.text.strip()
+            if not raw:
+                await update.message.reply_text(
+                    'Item name cannot be empty.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            if not validate_text_input(raw, min_len=self.settings.min_len_str, max_len=self.settings.max_len_str):
+                await update.message.reply_text(
+                    f'Invalid name. Length must be between {self.settings.min_len_str} and {self.settings.max_len_str} characters.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            context.user_data.setdefault('update_data', {})['item_name'] = raw
+            context.user_data['state'] = 'waiting_for_update_field'
+            await update.message.reply_text('Updated. What else?', reply_markup=self._update_field_keyboard())
+
+        elif state == 'waiting_for_update_amount':
+            raw = update.message.text.strip()
+            if not is_int(raw):
+                await update.message.reply_text(
+                    'Please enter a whole number for amount.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            val = int(raw)
+            if val < 1 or val > self.settings.max_item_amount:
+                await update.message.reply_text(
+                    f'Amount must be between 1 and {self.settings.max_item_amount}.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            context.user_data.setdefault('update_data', {})['item_amount'] = val
+            context.user_data['state'] = 'waiting_for_update_field'
+            await update.message.reply_text('Updated. What else?', reply_markup=self._update_field_keyboard())
+
+        elif state == 'waiting_for_update_type':
+            raw = update.message.text.strip().lower()
+            if raw not in [t.lower() for t in self.settings.allowed_types]:
+                allowed = ', '.join(self.settings.allowed_types)
+                await update.message.reply_text(
+                    f'Type must be one of: {allowed}.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            context.user_data.setdefault('update_data', {})['item_type'] = raw
+            context.user_data['state'] = 'waiting_for_update_field'
+            await update.message.reply_text('Updated. What else?', reply_markup=self._update_field_keyboard())
+
+        elif state == 'waiting_for_update_price':
+            raw = update.message.text.strip()
+            if not is_float(raw):
+                await update.message.reply_text(
+                    'Please enter a number for price.\nOr /cancel to cancel.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            val = round(float(raw), 2)
+            if val < 0 or val > self.settings.max_item_price:
+                await update.message.reply_text(
+                    f'Price must be between 0 and {self.settings.max_item_price}.',
+                    reply_markup=ForceReply(selective=True),
+                )
+                return
+            context.user_data.setdefault('update_data', {})['item_price'] = val
+            context.user_data['state'] = 'waiting_for_update_field'
+            await update.message.reply_text('Updated. What else?', reply_markup=self._update_field_keyboard())
+
+        elif state == 'waiting_for_update_availability':
+            text = update.message.text.strip().upper()
+            if text not in ('YES', 'NO'):
+                btns = InlineKeyboardMarkup.from_row([
+                    InlineKeyboardButton('Yes', callback_data='update_field_availability_yes'),
+                    InlineKeyboardButton('No', callback_data='update_field_availability_no'),
+                ])
+                await update.message.reply_text(
+                    'Please choose Yes or No for availability.\nOr /cancel to cancel.',
+                    reply_markup=btns,
+                )
+                return
+            context.user_data.setdefault('update_data', {})['availability'] = (text == 'YES')
+            context.user_data['state'] = 'waiting_for_update_field'
+            await update.message.reply_text('Updated. What else?', reply_markup=self._update_field_keyboard())
+
+    async def apply_update_field_choice(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+        callback_data: str,
+    ) -> None:
+        """Handle callback: field chosen or Done in update-item flow."""
+        state = context.user_data.get('state')
+        if state != 'waiting_for_update_field' and not (state or '').startswith('waiting_for_update'):
+            await self.bot.send_message(chat_id, "This action has expired. Please start over with Update item.")
+            return
+        if session is None:
+            await self.bot.send_message(chat_id, "Database session not available. Please try again.")
+            return
+
+        if callback_data == 'update_field_done':
+            update_item_id = context.user_data.get('update_item_id')
+            update_data = context.user_data.get('update_data') or {}
+            if update_item_id is None:
+                await self.bot.send_message(chat_id, "Session expired. Please start over with Update item.")
+                clear_flow_state(context)
+                return
+            if not update_data:
+                await self.bot.send_message(chat_id, "No changes made. Item unchanged.")
+                context.user_data['state'] = 'waiting_for_update_field'
+                await self.bot.send_message(
+                    chat_id,
+                    'Choose a field to change or tap Done to finish.',
+                    reply_markup=self._update_field_keyboard(),
+                )
+                return
+            try:
+                repository = ItemRepository(session)
+                payload = ItemUpdate(**update_data)
+                updated = await repository.update_item(update_item_id, payload)
+                clear_flow_state(context)
+                if updated:
+                    await self.bot.send_message(
+                        chat_id,
+                        f'Item updated: {updated.item_name}, amount={updated.item_amount}, '
+                        f'type={updated.item_type}, price={updated.item_price}, availability={updated.availability}',
+                    )
+                    logger.info("Update item done id=%s chat_id=%s", update_item_id, chat_id)
+                else:
+                    await self.bot.send_message(chat_id, "Item could not be updated. Please try again.")
+            except Exception as e:
+                logger.error("Error updating item: %s", type(e).__name__, exc_info=True)
+                await self.bot.send_message(chat_id, "An error occurred. Please try again later.")
+                context.user_data['state'] = 'waiting_for_update_field'
+
+        elif callback_data == 'update_field_availability_yes':
+            context.user_data.setdefault('update_data', {})['availability'] = True
+            context.user_data['state'] = 'waiting_for_update_field'
+            await self.bot.send_message(chat_id, 'Availability set to Yes. What else?', reply_markup=self._update_field_keyboard())
+        elif callback_data == 'update_field_availability_no':
+            context.user_data.setdefault('update_data', {})['availability'] = False
+            context.user_data['state'] = 'waiting_for_update_field'
+            await self.bot.send_message(chat_id, 'Availability set to No. What else?', reply_markup=self._update_field_keyboard())
+
+        elif callback_data == 'update_field_name':
+            context.user_data['state'] = 'waiting_for_update_name'
+            await self.bot.send_message(
+                chat_id,
+                'Enter new name for the item.\nOr /cancel to cancel.',
+                reply_markup=ForceReply(selective=True),
+            )
+        elif callback_data == 'update_field_amount':
+            context.user_data['state'] = 'waiting_for_update_amount'
+            await self.bot.send_message(
+                chat_id,
+                f'Enter new amount (1–{self.settings.max_item_amount}).\nOr /cancel to cancel.',
+                reply_markup=ForceReply(selective=True),
+            )
+        elif callback_data == 'update_field_type':
+            context.user_data['state'] = 'waiting_for_update_type'
+            types_row = [
+                InlineKeyboardButton(t, callback_data=f'update_field_type_{t}')
+                for t in self.settings.allowed_types
+            ]
+            await self.bot.send_message(
+                chat_id,
+                'Choose new type or type it in the chat.\nOr /cancel to cancel.',
+                reply_markup=InlineKeyboardMarkup([types_row]),
+            )
+        elif callback_data == 'update_field_price':
+            context.user_data['state'] = 'waiting_for_update_price'
+            await self.bot.send_message(
+                chat_id,
+                f'Enter new price (0–{self.settings.max_item_price}).\nOr /cancel to cancel.',
+                reply_markup=ForceReply(selective=True),
+            )
+        elif callback_data == 'update_field_availability':
+            context.user_data['state'] = 'waiting_for_update_availability'
+            btns = InlineKeyboardMarkup.from_row([
+                InlineKeyboardButton('Yes', callback_data='update_field_availability_yes'),
+                InlineKeyboardButton('No', callback_data='update_field_availability_no'),
+            ])
+            await self.bot.send_message(
+                chat_id,
+                'Set availability.\nOr /cancel to cancel.',
+                reply_markup=btns,
+            )
+        elif callback_data.startswith('update_field_type_'):
+            chosen = callback_data.replace('update_field_type_', '', 1).strip()
+            if chosen.lower() in [t.lower() for t in self.settings.allowed_types]:
+                context.user_data.setdefault('update_data', {})['item_type'] = chosen.lower()
+            context.user_data['state'] = 'waiting_for_update_field'
+            await self.bot.send_message(chat_id, 'Updated. What else?', reply_markup=self._update_field_keyboard())
 
     async def update_availability_status(
         self,

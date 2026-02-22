@@ -4,7 +4,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import Update, Bot
-from telegram.ext import Application, ContextTypes
+from telegram.ext import Application
 from app.core.dependencies import get_db
 from app.core.config import get_settings
 from app.services.bot_service import BotService

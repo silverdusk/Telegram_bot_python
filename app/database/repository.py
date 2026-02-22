@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, and_
-from sqlalchemy.orm import selectinload
 from database.models import Item
 from app.schemas.item import ItemCreate, ItemUpdate
 
@@ -43,7 +42,7 @@ class ItemRepository:
             logger.error(f"Error creating item: {e}")
             await self.session.rollback()
             raise
-    
+
     async def get_item_by_id(self, item_id: int) -> Optional[Item]:
         """Get item by ID."""
         try:
@@ -52,9 +51,9 @@ class ItemRepository:
             )
             return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"Error getting item {item_id}: {e}")
+            logger.error("Error getting item %s: %s", item_id, e)
             raise
-    
+
     async def get_items(
         self,
         item_name: Optional[str] = None,
@@ -128,22 +127,19 @@ class ItemRepository:
         item_id: int,
         item_data: ItemUpdate,
     ) -> Optional[Item]:
-        """Update an item."""
+        """Update an item by ID. Returns updated item or None if not found."""
         try:
             item = await self.get_item_by_id(item_id)
             if not item:
                 return None
-            
             update_data = item_data.model_dump(exclude_unset=True)
             for key, value in update_data.items():
                 setattr(item, key, value)
-            
             await self.session.flush()
             await self.session.refresh(item)
-            logger.info(f"Item updated: {item_id}")
+            logger.info("Item updated id=%s", item_id)
             return item
         except Exception as e:
-            logger.error(f"Error updating item {item_id}: {e}")
+            logger.error("Error updating item %s: %s", item_id, e)
             await self.session.rollback()
             raise
-

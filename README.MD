@@ -1,15 +1,15 @@
 # Telegram Bot Project
 
-A Telegram bot for item management: add items, list them, and update availability. Built with **FastAPI** and **python-telegram-bot** in **webhook** mode.
+A Telegram bot for item management: add, list, update, and remove items; change availability. Built with **FastAPI** and **python-telegram-bot** in **webhook** mode.
 
 **→ [Deploy and run on a server (manual)](docs/DEPLOY_MANUAL.md)**  
 **→ [Deployment guide (Docker, webhook, HTTPS)](DEPLOYMENT.md)**
 
 ## Features
 
-- **Item management**: Add items (name, amount, type, price, availability), get list of your items, **remove items by name**, change availability by item name.
-- **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`. Remove-item flow: enter name → items matching that name (for the current chat) are deleted.
-- **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Remove item, Admin, Change availability, Send test message, Stop).
+- **Item management**: Add items (name, amount, type, price, availability), get list of your items, **update item** (by exact name: change name, amount, type, price, availability), **remove items by name**, change availability by item name.
+- **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`. Update-item flow: enter exact name → choose fields to change (inline buttons) → enter new values → Done. Remove-item flow: enter name → items matching that name (for the current chat) are deleted.
+- **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Remove item, Update item, Admin, Change availability, Send test message, Stop).
 - **Validation**: Length and character rules for names; amount/price range checks; working-hours check for Add (configurable).
 - **Authorization**: Stop command restricted to configured user IDs.
 - **Logging**: Structured logging (no secrets or user content in logs).
@@ -27,9 +27,9 @@ app/
     validators.py     # validate_text_input, is_int, is_float, check_working_hours
   database/
     session.py        # Async engine, session
-    repository.py     # Item CRUD (incl. delete_by_name_and_chat)
+    repository.py     # Item CRUD (get_item_by_id, update_item, delete_by_name_and_chat)
   services/
-    bot_service.py    # Bot logic: welcome, menu, add/get/remove/availability, keyboards
+    bot_service.py    # Bot logic: welcome, menu, add/get/update/remove/availability, keyboards
   schemas/
     item.py           # ItemCreate, ItemResponse, ItemUpdate
 database/             # Legacy DB layer (optional)
@@ -37,8 +37,8 @@ bot/                  # Legacy Telebot-based bot (optional)
 tests/
   conftest.py         # Fixtures (mock_settings, mock_bot, mock_context)
   test_validators.py  # Validators
-  test_app_bot_service.py  # clear_flow_state, keyboards, handle_remove_item, process_remove_item
-  test_app_repository.py   # delete_by_name_and_chat
+  test_app_bot_service.py  # clear_flow_state, keyboards, remove/update flows, apply_update_field_choice
+  test_app_repository.py   # get_item_by_id, update_item, delete_by_name_and_chat
   test_schemas.py     # ItemCreate, ItemUpdate
 ```
 

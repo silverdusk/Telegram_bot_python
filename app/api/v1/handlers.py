@@ -10,7 +10,6 @@ from telegram.ext import (
     ContextTypes,
 )
 from app.services.bot_service import BotService
-from app.core.validators import check_working_hours
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +43,10 @@ def register_handlers(application: Application, bot_service: BotService) -> None
     async def handle_remove(u, c):
         db = c.bot_data.get('current_db_session')
         await bot_service.handle_remove_item(u, c, db)
+
+    async def handle_update(u, c):
+        db = c.bot_data.get('current_db_session')
+        await bot_service.handle_update_item(u, c, db)
 
     application.add_handler(
         MessageHandler(
@@ -79,6 +82,12 @@ def register_handlers(application: Application, bot_service: BotService) -> None
         MessageHandler(
             filters.Regex("^Remove item$"),
             handle_remove,
+        )
+    )
+    application.add_handler(
+        MessageHandler(
+            filters.Regex("^Update item$"),
+            handle_update,
         )
     )
 
@@ -146,6 +155,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     if chat_id is not None and query.data == 'show_menu':
         await bot_service.send_menu_to_chat(chat_id)
         return
+    if chat_id is not None and query.data and query.data.startswith('update_field'):
+        await bot_service.apply_update_field_choice(context, db_session, chat_id, query.data)
+        return
 
     if query.data == 'Add':
         await bot_service.handle_add_item(update, context, db_session)
@@ -153,6 +165,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await bot_service.get_items(update, context, db_session)
     elif query.data == 'remove_item':
         await bot_service.handle_remove_item(update, context, db_session)
+    elif query.data == 'update_item':
+        await bot_service.handle_update_item(update, context, db_session)
     elif query.data == 'Admin':
         await bot_service.handle_admin(update, context)
     elif query.data == 'Send test message':
@@ -179,6 +193,8 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             await bot_service.process_availability_update(update, context, db_session)
         elif state == 'waiting_for_remove_item_name':
             await bot_service.process_remove_item(update, context, db_session)
+        elif state and state.startswith('waiting_for_update'):
+            await bot_service.process_update_item(update, context, db_session)
         else:
             await bot_service.process_item_input(update, context, db_session)
     else:
