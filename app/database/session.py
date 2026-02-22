@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
+from sqlalchemy import select
 from app.core.config import get_settings
-from database.models import Base
+from database.models import Base, Role
 
 logger = logging.getLogger(__name__)
 
@@ -71,4 +72,24 @@ async def create_tables() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created")
+
+
+async def seed_roles() -> None:
+    """Ensure default roles (admin, user) exist. Call after create_tables."""
+    if async_session_maker is None:
+        init_db()
+    async with async_session_maker() as session:
+        try:
+            result = await session.execute(select(Role))
+            existing = {r.name for r in result.scalars().all()}
+            if "admin" not in existing:
+                session.add(Role(name="admin"))
+            if "user" not in existing:
+                session.add(Role(name="user"))
+            await session.commit()
+            logger.info("Roles seeded")
+        except Exception as e:
+            await session.rollback()
+            logger.warning("Could not seed roles: %s", e)
+            raise
 

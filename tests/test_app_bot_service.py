@@ -15,6 +15,9 @@ class TestClearFlowState:
         mock_context.user_data["availability_item_name"] = "FOO"
         mock_context.user_data["update_item_id"] = 42
         mock_context.user_data["update_data"] = {"item_name": "x"}
+        mock_context.user_data["update_user_id"] = 1
+        mock_context.user_data["manage_add_telegram_id"] = 2
+        mock_context.user_data["manage_set_role_telegram_id"] = 3
         mock_context.user_data["other"] = "keep"
 
         clear_flow_state(mock_context)
@@ -24,6 +27,9 @@ class TestClearFlowState:
         assert "availability_item_name" not in mock_context.user_data
         assert "update_item_id" not in mock_context.user_data
         assert "update_data" not in mock_context.user_data
+        assert "update_user_id" not in mock_context.user_data
+        assert "manage_add_telegram_id" not in mock_context.user_data
+        assert "manage_set_role_telegram_id" not in mock_context.user_data
         assert mock_context.user_data["other"] == "keep"
 
     def test_idempotent_when_keys_missing(self, mock_context):
@@ -90,6 +96,20 @@ class TestBotServiceKeyboards:
         assert len(all_buttons) >= 1
         assert any(btn.text == "Back to menu" for btn in all_buttons)
 
+    def test_admin_menu_keyboard_has_manage_users_and_back(self, get_settings, mock_settings, mock_bot):
+        get_settings.return_value = mock_settings
+        service = BotService(mock_bot)
+        keyboard = service._admin_menu_keyboard()
+        assert keyboard is not None
+        all_buttons = [btn for row in keyboard.inline_keyboard for btn in row]
+        callback_data_list = [btn.callback_data for btn in all_buttons]
+        assert "mu_list" in callback_data_list
+        assert "mu_add" in callback_data_list
+        assert "mu_set_role" in callback_data_list
+        assert "mu_remove" in callback_data_list
+        assert "show_menu" in callback_data_list
+        assert any(btn.text == "Back to menu" for btn in all_buttons)
+
 
 @patch("app.services.bot_service.get_settings")
 class TestHandleRemoveItem:
@@ -125,13 +145,14 @@ class TestHandleRemoveItem:
         assert mock_context.user_data.get("state") != "waiting_for_remove_item_name"
 
 
+@patch("app.services.bot_service.get_user_role", new_callable=AsyncMock, return_value="user")
 @patch("app.services.bot_service.validate_text_input", return_value=True)
 @patch("app.services.bot_service.get_settings")
 class TestProcessRemoveItem:
     """Tests for process_remove_item (process name and delete)."""
 
     def test_replies_removed_count_when_items_deleted(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_remove_item_name"
@@ -139,6 +160,7 @@ class TestProcessRemoveItem:
         msg.reply_text = AsyncMock()
         update = MagicMock()
         update.effective_chat = MagicMock(id=456)
+        update.effective_user = MagicMock(id=111)
         update.message = msg
         update.message.text = "  Widget  "
         session = MagicMock()
@@ -148,14 +170,14 @@ class TestProcessRemoveItem:
             service = BotService(mock_bot)
             asyncio.run(service.process_remove_item(update, context=mock_context, session=session))
 
-        mock_repo.delete_by_name_and_chat.assert_called_once_with("Widget", 456)
+        mock_repo.delete_by_name_and_chat.assert_called_once_with("Widget", 456, created_by_user_id=111)
         assert mock_context.user_data.get("state") is None
         assert msg.reply_text.call_count == 2
         assert "Removed 2 item(s)" in msg.reply_text.call_args_list[0][0][0]
         assert "What would you like to do next" in msg.reply_text.call_args_list[1][0][0]
 
     def test_replies_not_found_when_zero_deleted(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_remove_item_name"
@@ -163,6 +185,7 @@ class TestProcessRemoveItem:
         msg.reply_text = AsyncMock()
         update = MagicMock()
         update.effective_chat = MagicMock(id=456)
+        update.effective_user = MagicMock(id=111)
         update.message = msg
         update.message.text = "NoSuchItem"
         session = MagicMock()
@@ -177,7 +200,7 @@ class TestProcessRemoveItem:
         assert "What would you like to do next" in msg.reply_text.call_args_list[1][0][0]
 
     def test_replies_empty_name_error_when_text_stripped_empty(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_remove_item_name"
@@ -185,6 +208,7 @@ class TestProcessRemoveItem:
         msg.reply_text = AsyncMock()
         update = MagicMock()
         update.effective_chat = MagicMock(id=456)
+        update.effective_user = MagicMock(id=111)
         update.message = msg
         update.message.text = "   "
         session = MagicMock()
@@ -197,7 +221,7 @@ class TestProcessRemoveItem:
         assert mock_context.user_data.get("state") == "waiting_for_remove_item_name"
 
     def test_replies_invalid_length_when_validation_fails(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         mock_validate.return_value = False
         get_settings.return_value = mock_settings
@@ -206,6 +230,7 @@ class TestProcessRemoveItem:
         msg.reply_text = AsyncMock()
         update = MagicMock()
         update.effective_chat = MagicMock(id=456)
+        update.effective_user = MagicMock(id=111)
         update.message = msg
         update.message.text = "x" * 300
         session = MagicMock()
@@ -217,7 +242,7 @@ class TestProcessRemoveItem:
         assert "Invalid" in msg.reply_text.call_args[0][0] or "Length" in msg.reply_text.call_args[0][0]
         assert mock_context.user_data.get("state") == "waiting_for_remove_item_name"
 
-    def test_does_nothing_when_state_not_remove(self, get_settings, mock_validate, mock_settings, mock_bot, mock_context):
+    def test_does_nothing_when_state_not_remove(self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_item_name"
         msg = MagicMock()
@@ -268,13 +293,14 @@ class TestHandleUpdateItem:
         assert mock_context.user_data.get("state") != "waiting_for_update_item_name"
 
 
+@patch("app.services.bot_service.get_user_role", new_callable=AsyncMock, return_value="user")
 @patch("app.services.bot_service.validate_text_input", return_value=True)
 @patch("app.services.bot_service.get_settings")
 class TestProcessUpdateItem:
     """Tests for process_update_item."""
 
     def test_finds_one_item_and_shows_field_keyboard(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_item_name"
@@ -283,12 +309,14 @@ class TestProcessUpdateItem:
         msg.reply_text = AsyncMock()
         update = MagicMock()
         update.effective_chat = MagicMock(id=456)
+        update.effective_user = MagicMock(id=111)
         update.message = msg
         update.message.text = "  Widget  "
         session = MagicMock()
         mock_item = MagicMock()
         mock_item.id = 99
         mock_item.item_name = "Widget"
+        mock_item.created_by_user_id = 111
         mock_repo = MagicMock()
         mock_repo.get_items = AsyncMock(return_value=[mock_item])
         with patch("app.services.bot_service.ItemRepository", return_value=mock_repo):
@@ -302,7 +330,7 @@ class TestProcessUpdateItem:
         assert "What do you want to change" in msg.reply_text.call_args[0][0] or "Done" in msg.reply_text.call_args[0][0]
 
     def test_replies_no_item_found_when_empty_list(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_item_name"
@@ -326,7 +354,7 @@ class TestProcessUpdateItem:
         assert mock_context.user_data.get("state") is None
 
     def test_replies_multiple_items_when_more_than_one(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_item_name"
@@ -349,7 +377,7 @@ class TestProcessUpdateItem:
         assert mock_context.user_data.get("update_item_id") is None
 
     def test_waiting_for_update_field_replies_use_buttons(
-        self, get_settings, mock_validate, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_field"
@@ -367,7 +395,7 @@ class TestProcessUpdateItem:
         msg.reply_text.assert_called_once()
         assert "buttons" in msg.reply_text.call_args[0][0].lower() or "Done" in msg.reply_text.call_args[0][0]
 
-    def test_does_nothing_when_state_not_update(self, get_settings, mock_validate, mock_settings, mock_bot, mock_context):
+    def test_does_nothing_when_state_not_update(self, get_settings, mock_validate, mock_get_user_role, mock_settings, mock_bot, mock_context):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_item_name"
         msg = MagicMock()
@@ -383,16 +411,18 @@ class TestProcessUpdateItem:
         msg.reply_text.assert_not_called()
 
 
+@patch("app.services.bot_service.get_user_role", new_callable=AsyncMock, return_value="user")
 @patch("app.services.bot_service.get_settings")
 class TestApplyUpdateFieldChoice:
     """Tests for apply_update_field_choice (callback: Done, field buttons)."""
 
     def test_done_with_update_data_calls_repo_and_clears_state(
-        self, get_settings, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_field"
         mock_context.user_data["update_item_id"] = 10
+        mock_context.user_data["update_user_id"] = 111
         mock_context.user_data["update_data"] = {"item_name": "NewName"}
         session = MagicMock()
         mock_updated = MagicMock()
@@ -401,7 +431,10 @@ class TestApplyUpdateFieldChoice:
         mock_updated.item_type = "spare part"
         mock_updated.item_price = 1.5
         mock_updated.availability = True
+        mock_item_to_check = MagicMock()
+        mock_item_to_check.created_by_user_id = 111
         mock_repo = MagicMock()
+        mock_repo.get_item_by_id = AsyncMock(return_value=mock_item_to_check)
         mock_repo.update_item = AsyncMock(return_value=mock_updated)
         with patch("app.services.bot_service.ItemRepository", return_value=mock_repo):
             service = BotService(mock_bot)
@@ -421,7 +454,7 @@ class TestApplyUpdateFieldChoice:
         assert any("Item updated" in t or "NewName" in t for t in all_msg_texts)
         assert any("What would you like to do next" in t for t in all_msg_texts)
 
-    def test_done_with_no_update_data_sends_no_changes(self, get_settings, mock_settings, mock_bot, mock_context):
+    def test_done_with_no_update_data_sends_no_changes(self, get_settings, mock_get_user_role, mock_settings, mock_bot, mock_context):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_field"
         mock_context.user_data["update_item_id"] = 10
@@ -438,7 +471,7 @@ class TestApplyUpdateFieldChoice:
         assert any("No changes" in t for t in all_msg_texts)
         assert mock_context.user_data.get("state") == "waiting_for_update_field"
 
-    def test_done_expired_when_no_update_item_id(self, get_settings, mock_settings, mock_bot, mock_context):
+    def test_done_expired_when_no_update_item_id(self, get_settings, mock_get_user_role, mock_settings, mock_bot, mock_context):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_field"
         mock_context.user_data["update_item_id"] = None
@@ -454,7 +487,7 @@ class TestApplyUpdateFieldChoice:
         assert "expired" in service.bot.send_message.call_args[0][1].lower() or "start over" in service.bot.send_message.call_args[0][1].lower()
         assert mock_context.user_data.get("update_item_id") is None
 
-    def test_field_name_sets_state_and_asks_for_value(self, get_settings, mock_settings, mock_bot, mock_context):
+    def test_field_name_sets_state_and_asks_for_value(self, get_settings, mock_get_user_role, mock_settings, mock_bot, mock_context):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_field"
         mock_context.user_data["update_item_id"] = 5
@@ -471,7 +504,7 @@ class TestApplyUpdateFieldChoice:
         assert "name" in service.bot.send_message.call_args[0][1].lower()
 
     def test_field_availability_yes_stores_and_returns_to_field_keyboard(
-        self, get_settings, mock_settings, mock_bot, mock_context
+        self, get_settings, mock_get_user_role, mock_settings, mock_bot, mock_context
     ):
         get_settings.return_value = mock_settings
         mock_context.user_data["state"] = "waiting_for_update_field"

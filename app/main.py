@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
-from app.database.session import init_db, close_db, create_tables
+from app.database.session import init_db, close_db, create_tables, seed_roles
 from app.api.v1 import webhook
 from app.api.v1.webhook import get_bot_application
 
@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
     init_db()
     if settings.create_tables_on_startup:
         await create_tables()
+        await seed_roles()
         logger.info("Database tables created")
     logger.info("Database initialized")
 

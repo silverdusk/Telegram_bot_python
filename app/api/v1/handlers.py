@@ -136,15 +136,17 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         state = context.user_data.get('state')
         if state == 'waiting_for_availability':
             context.user_data.setdefault('item_data', {})['availability'] = query.data == 'item_availability_yes'
-            await bot_service._finish_add_item(context, db_session, chat_id)
+            uid = query.from_user.id if query.from_user else None
+            await bot_service._finish_add_item(context, db_session, chat_id, user_id=uid)
         else:
             await bot_service.bot.send_message(chat_id, _expired_msg)
         return
     if chat_id is not None and query.data in ('avail_status_yes', 'avail_status_no'):
         state = context.user_data.get('state')
         if state == 'waiting_for_availability_status':
+            uid = query.from_user.id if query.from_user else None
             await bot_service.apply_availability_status_choice(
-                context, db_session, chat_id, query.data == 'avail_status_yes'
+                context, db_session, chat_id, query.data == 'avail_status_yes', user_id=uid
             )
         else:
             await bot_service.bot.send_message(chat_id, _expired_msg)
@@ -184,6 +186,22 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await bot_service.update_availability_status(update, context, db_session)
     elif query.data == 'stop_bot':
         await bot_service.stop_bot(update, context)
+    elif chat_id is not None and query.data == 'mu_list':
+        await bot_service.list_users(update, context, db_session)
+    elif chat_id is not None and query.data == 'mu_add':
+        await bot_service.start_add_user(update, context, db_session, chat_id)
+    elif chat_id is not None and query.data == 'mu_set_role':
+        await bot_service.start_set_role(update, context, db_session, chat_id)
+    elif chat_id is not None and query.data == 'mu_remove':
+        await bot_service.start_remove_user(update, context, db_session, chat_id)
+    elif chat_id is not None and query.data == 'mu_add_role_admin':
+        await bot_service.apply_manage_add_user_role(context, db_session, chat_id, 'admin')
+    elif chat_id is not None and query.data == 'mu_add_role_user':
+        await bot_service.apply_manage_add_user_role(context, db_session, chat_id, 'user')
+    elif chat_id is not None and query.data == 'mu_set_role_admin':
+        await bot_service.apply_manage_set_role_choice(context, db_session, chat_id, 'admin')
+    elif chat_id is not None and query.data == 'mu_set_role_user':
+        await bot_service.apply_manage_set_role_choice(context, db_session, chat_id, 'user')
 
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -202,6 +220,12 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             await bot_service.process_availability_update(update, context, db_session)
         elif state == 'waiting_for_remove_item_name':
             await bot_service.process_remove_item(update, context, db_session)
+        elif state == 'waiting_for_manage_add_user_id':
+            await bot_service.process_manage_add_user(update, context, db_session)
+        elif state == 'waiting_for_manage_set_role_id':
+            await bot_service.process_manage_set_role(update, context, db_session)
+        elif state == 'waiting_for_manage_remove_user_id':
+            await bot_service.process_manage_remove_user(update, context, db_session)
         elif state and state.startswith('waiting_for_update'):
             await bot_service.process_update_item(update, context, db_session)
         else:

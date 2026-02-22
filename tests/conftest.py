@@ -2,6 +2,13 @@
 import pytest
 from unittest.mock import MagicMock
 
+try:
+    from cryptography.fernet import Fernet
+    _TEST_ENCRYPTION_KEY = Fernet.generate_key().decode()
+except Exception:
+    # Fallback if cryptography not available (e.g. minimal env)
+    _TEST_ENCRYPTION_KEY = "dGVzdF9rZXlfMTIzNDU2Nzg5MGFiY2RlZjAxMjM0NTY3ODkwYWJjZGU="
+
 
 @pytest.fixture
 def mock_settings():
@@ -14,6 +21,8 @@ def mock_settings():
     s.allowed_types = ["spare part", "miscellaneous"]
     s.skip_working_hours = True
     s.authorized_ids = []
+    s.effective_fallback_admin_ids = []
+    s.encryption_key = _TEST_ENCRYPTION_KEY
     return s
 
 

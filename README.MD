@@ -11,7 +11,7 @@ A Telegram bot for item management: add, list, update, and remove items; change 
 - **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`. Update-item flow: enter exact name → choose fields to change (inline buttons) → enter new values → Done. Remove-item flow: enter name → items matching that name (for the current chat) are deleted. **No dead ends**: after every flow the bot asks “What would you like to do next?” with **Back to menu** and, where relevant, an option to repeat the same action (e.g. Add another item, Update another item, Remove another item).
 - **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Remove item, Update item, Admin, Change availability, Send test message, Stop).
 - **Validation**: Length and character rules for names; amount/price range checks; working-hours check for Add (configurable).
-- **Authorization**: Stop command restricted to configured user IDs.
+- **Authorization and roles**: Roles (admin, user) are stored in the database; user data encryption is mandatory (Fernet key in config). A **fallback admin** list (e.g. `AUTHORIZED_IDS` or `FALLBACK_ADMIN_IDS`) is used when a user is not in the DB or the DB is unavailable, so admins retain access. **Admin**: Stop, Admin menu, Send test message, manage all items, and manage users (list, add, set role, remove). **User**: Can update or delete only items they created.
 - **Logging**: Structured logging (no secrets or user content in logs).
 
 ## Project structure
@@ -23,23 +23,26 @@ app/
     handlers.py        # Command and message handlers, callback routing
     webhook.py         # POST /webhook/telegram, health
   core/
-    config.py         # Settings (env / config.json)
-    validators.py     # validate_text_input, is_int, is_float, check_working_hours
+    config.py          # Settings (env / config.json)
+    validators.py      # validate_text_input, is_int, is_float, check_working_hours
+    permissions.py     # get_user_role, is_admin_role, can_manage_item
+    encryption.py      # User data encryption (Fernet, required)
   database/
-    session.py        # Async engine, session
-    repository.py     # Item CRUD (get_item_by_id, update_item, delete_by_name_and_chat)
+    session.py         # Async engine, session, seed_roles
+    repository.py      # Item CRUD (get_item_by_id, update_item, delete_by_name_and_chat, created_by_user_id); UserRepository (list_users, create_user, set_role, delete_user)
   services/
-    bot_service.py    # Bot logic: welcome, menu, add/get/update/remove/availability, keyboards
+    bot_service.py     # Bot logic: welcome, menu, add/get/update/remove/availability, admin menu, manage users, keyboards
   schemas/
-    item.py           # ItemCreate, ItemResponse, ItemUpdate
-database/             # Legacy DB layer (optional)
-bot/                  # Legacy Telebot-based bot (optional)
+    item.py            # ItemCreate, ItemResponse, ItemUpdate
+database/              # Legacy DB layer (optional)
+bot/                   # Legacy Telebot-based bot (optional)
 tests/
-  conftest.py         # Fixtures (mock_settings, mock_bot, mock_context)
-  test_validators.py  # Validators
-  test_app_bot_service.py  # clear_flow_state, keyboards, remove/update/availability flows, apply_update_field_choice, start_*_flow
+  conftest.py          # Fixtures (mock_settings, mock_bot, mock_context)
+  test_validators.py   # Validators
+  test_permissions.py  # get_user_role, is_admin_role, can_manage_item
+  test_app_bot_service.py  # clear_flow_state, keyboards, remove/update/availability flows, apply_update_field_choice, start_*_flow, admin menu
   test_app_repository.py   # get_item_by_id, update_item, delete_by_name_and_chat
-  test_schemas.py     # ItemCreate, ItemUpdate
+  test_schemas.py      # ItemCreate, ItemUpdate
 ```
 
 ## Requirements
@@ -132,7 +135,9 @@ Main variables (env or `config.json`):
 |----------|-------------|
 | `BOT_TOKEN` | Telegram bot token (required) |
 | `DATABASE__*` or `DATABASE` | DB name, user, password, host, port, table_name |
-| `AUTHORIZED_IDS` | JSON array of Telegram user IDs allowed to use Stop |
+| `AUTHORIZED_IDS` | Fallback admin Telegram user IDs when user not in DB or DB unavailable (JSON array). Also used for Stop if `FALLBACK_ADMIN_IDS` is not set. |
+| `FALLBACK_ADMIN_IDS` | Optional; JSON array of Telegram user IDs used as fallback admins; if set, overrides `AUTHORIZED_IDS` for role resolution. |
+| `ENCRYPTION_KEY` | Required; base64 Fernet key for encrypting user data. Generate with: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `ALLOWED_TYPES` | Item types, e.g. `["spare part", "miscellaneous"]` |
 | `MIN_LEN_STR`, `MAX_LEN_STR` | Min/max length for text fields (default 1, 255) |
 | `MAX_ITEM_AMOUNT`, `MAX_ITEM_PRICE` | Upper bounds for amount and price |
@@ -142,10 +147,14 @@ Main variables (env or `config.json`):
 
 See `.env.example` for a full list.
 
+### Authorization and roles
+
+Roles (admin, user) are stored in the database. If a user is not found in the DB or the DB is unavailable, the app uses the fallback admin list (`FALLBACK_ADMIN_IDS` if set, otherwise `AUTHORIZED_IDS`) so that configured admins keep access. User data encryption is mandatory: set `ENCRYPTION_KEY` to a base64 Fernet key (generate one with the command in the configuration table).
+
 ## Tests
 
 ```bash
-poetry run python -m pytest tests/test_validators.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_schemas.py -v
+poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_schemas.py -v
 ```
 
 Run all tests:

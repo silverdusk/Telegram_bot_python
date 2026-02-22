@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     
     # Bot settings
     bot_token: str = Field(..., description="Telegram bot token")
-    authorized_ids: List[int] = Field(default_factory=list, description="Authorized user IDs (JSON in env: [123,456])")
+    authorized_ids: List[int] = Field(default_factory=list, description="Fallback admin Telegram user IDs when DB unavailable (JSON: [123,456])")
+    fallback_admin_ids: List[int] | None = Field(default=None, description="Override fallback admin IDs; if None, uses authorized_ids")
+    encryption_key: str = Field(..., min_length=1, description="Base64 Fernet key for encrypting user data (required)")
     allowed_types: List[str] = Field(
         default_factory=lambda: ["spare part", "miscellaneous"],
         description="Allowed item types (JSON in env)"
@@ -53,6 +55,25 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 return [int(x.strip()) for x in v.split(",") if x.strip()]
         return v if v is not None else []
+
+    @field_validator("fallback_admin_ids", mode="before")
+    @classmethod
+    def parse_fallback_admin_ids(cls, v: Union[List[int], str, None]) -> List[int] | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [int(x.strip()) for x in v.split(",") if x.strip()]
+        return v
+
+    @property
+    def effective_fallback_admin_ids(self) -> List[int]:
+        """IDs treated as admin when user not in DB or DB unavailable."""
+        if self.fallback_admin_ids is not None:
+            return self.fallback_admin_ids
+        return self.authorized_ids
 
     @field_validator("allowed_types", mode="before")
     @classmethod

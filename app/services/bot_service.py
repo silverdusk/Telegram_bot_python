@@ -4,7 +4,7 @@ from typing import Optional
 from telegram import Update, Bot, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from telegram.ext import ContextTypes
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.repository import ItemRepository
+from app.database.repository import ItemRepository, UserRepository
 from app.schemas.item import ItemCreate, ItemUpdate
 from app.core.validators import (
     validate_text_input,
@@ -13,13 +13,17 @@ from app.core.validators import (
     check_working_hours,
 )
 from app.core.config import get_settings
+from app.core.permissions import get_user_role, is_admin_role, can_manage_item
 
 logger = logging.getLogger(__name__)
 
 
 def clear_flow_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Clear any ongoing flow state so user starts from a clean slate."""
-    for key in ('state', 'item_data', 'availability_item_name', 'update_item_id', 'update_data'):
+    for key in (
+        'state', 'item_data', 'availability_item_name', 'update_item_id', 'update_data',
+        'update_user_id', 'manage_add_telegram_id', 'manage_set_role_telegram_id',
+    ):
         context.user_data.pop(key, None)
 
 
@@ -32,9 +36,19 @@ class BotService:
         self.settings = get_settings()
 
     async def send_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Send welcome message with keyboard."""
+        """Send welcome message with keyboard. Ensures user exists in DB (role user) if not fallback admin."""
         clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
+        user_id = update.effective_user.id if update.effective_user else None
+        session = context.bot_data.get("current_db_session") if context.bot_data else None
+        if session and user_id is not None and user_id not in self.settings.effective_fallback_admin_ids:
+            try:
+                user_repo = UserRepository(session)
+                if await user_repo.get_by_telegram_id(user_id) is None:
+                    await user_repo.create_user(user_id, "user")
+                    logger.info("Created user for telegram_user_id=%s", user_id)
+            except Exception as e:
+                logger.warning("Could not ensure user for telegram_user_id=%s: %s", user_id, e)
         logger.info("Command /start chat_id=%s", chat_id)
         keyboard = [
             [KeyboardButton('Get'), KeyboardButton('Add')],
@@ -128,6 +142,8 @@ class BotService:
                 return None
 
             item_data['item_name'] = name
+            if update.effective_user:
+                context.user_data['_add_item_user_id'] = update.effective_user.id
             context.user_data['state'] = 'waiting_for_item_amount'
             await update.message.reply_text(
                 'Please provide amount of items.\nOr /cancel to cancel.',
@@ -240,7 +256,7 @@ class BotService:
             await update.message.reply_text("Database session not available. Please try again.")
             return None
         chat_id = update.effective_chat.id if update.effective_chat else None
-        return await self._finish_add_item(context, session, chat_id)
+        return await self._finish_add_item(context, session, chat_id, user_id=update.effective_user.id if update.effective_user else None)
 
     def _item_type_keyboard(self) -> InlineKeyboardMarkup:
         """Inline keyboard for item type choice (fixed options)."""
@@ -272,6 +288,7 @@ class BotService:
         context: ContextTypes.DEFAULT_TYPE,
         session: AsyncSession | None,
         chat_id: int,
+        user_id: Optional[int] = None,
     ) -> Optional[ItemCreate]:
         """Create item from context.user_data['item_data'], clear state, send confirmation."""
         if session is None:
@@ -284,7 +301,8 @@ class BotService:
         try:
             item_create = ItemCreate(**item_data)
             repository = ItemRepository(session)
-            item = await repository.create_item(item_create, chat_id)
+            creator = user_id if user_id is not None else context.user_data.get("_add_item_user_id")
+            item = await repository.create_item(item_create, chat_id, created_by_user_id=creator)
             context.user_data.pop('state', None)
             context.user_data.pop('item_data', None)
             text = (
@@ -487,8 +505,11 @@ class BotService:
             )
             return
         try:
+            user_id = update.effective_user.id if update.effective_user else None
+            role = await get_user_role(user_id, session, self.settings) if session else None
             repository = ItemRepository(session)
-            deleted = await repository.delete_by_name_and_chat(raw, chat_id)
+            creator_filter = None if is_admin_role(role) else user_id
+            deleted = await repository.delete_by_name_and_chat(raw, chat_id, created_by_user_id=creator_filter)
             context.user_data.pop('state', None)
             if deleted > 0:
                 await update.message.reply_text(
@@ -518,6 +539,36 @@ class BotService:
         """Single 'Back to menu' button (for end of flows)."""
         return InlineKeyboardMarkup([
             [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+        ])
+
+    def _admin_menu_keyboard(self) -> InlineKeyboardMarkup:
+        """Admin menu: manage users and back."""
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton('List users', callback_data='mu_list')],
+            [
+                InlineKeyboardButton('Add user', callback_data='mu_add'),
+                InlineKeyboardButton('Set role', callback_data='mu_set_role'),
+            ],
+            [InlineKeyboardButton('Remove user', callback_data='mu_remove')],
+            [InlineKeyboardButton('Back to menu', callback_data='show_menu')],
+        ])
+
+    def _manage_role_keyboard(self) -> InlineKeyboardMarkup:
+        """Choose role for Add user / Set role flows."""
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton('admin', callback_data='mu_add_role_admin'),
+                InlineKeyboardButton('user', callback_data='mu_add_role_user'),
+            ],
+        ])
+
+    def _manage_set_role_choice_keyboard(self) -> InlineKeyboardMarkup:
+        """Choose role for Set role flow (different callback prefix to distinguish)."""
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton('admin', callback_data='mu_set_role_admin'),
+                InlineKeyboardButton('user', callback_data='mu_set_role_user'),
+            ],
         ])
 
     def _update_field_keyboard(self) -> InlineKeyboardMarkup:
@@ -602,7 +653,15 @@ class BotService:
                     context.user_data.pop('update_data', None)
                     return
                 item = exact[0]
+                user_id = update.effective_user.id if update.effective_user else None
+                role = await get_user_role(user_id, session, self.settings)
+                if not can_manage_item(item.created_by_user_id, user_id, role):
+                    await update.message.reply_text("You are not authorized to update this item.")
+                    context.user_data.pop('state', None)
+                    context.user_data.pop('update_data', None)
+                    return
                 context.user_data['update_item_id'] = item.id
+                context.user_data['update_user_id'] = user_id
                 context.user_data['state'] = 'waiting_for_update_field'
                 await update.message.reply_text(
                     'What do you want to change? Choose a field or tap Done to save.',
@@ -737,6 +796,16 @@ class BotService:
                 return
             try:
                 repository = ItemRepository(session)
+                item_to_check = await repository.get_item_by_id(update_item_id)
+                if not item_to_check:
+                    await self.bot.send_message(chat_id, "Item not found. Please start over.")
+                    clear_flow_state(context)
+                    return
+                user_id = context.user_data.get('update_user_id')
+                role = await get_user_role(user_id, session, self.settings)
+                if not can_manage_item(item_to_check.created_by_user_id, user_id, role):
+                    await self.bot.send_message(chat_id, "You are not authorized to update this item.")
+                    return
                 payload = ItemUpdate(**update_data)
                 updated = await repository.update_item(update_item_id, payload)
                 clear_flow_state(context)
@@ -918,9 +987,14 @@ class BotService:
                 return
             
             try:
+                user_id = update.effective_user.id if update.effective_user else None
+                role = await get_user_role(user_id, session, self.settings)
+                chat_id_av = update.effective_chat.id if update.effective_chat else None
+                creator_filter = user_id if role == "user" else None
                 repository = ItemRepository(session)
-                updated = await repository.update_availability(item_name, availability)
-                
+                updated = await repository.update_availability(
+                    item_name, availability, chat_id=chat_id_av, created_by_user_id=creator_filter
+                )
                 if updated:
                     await update.message.reply_text(
                         f'Update availability status.\n'
@@ -952,6 +1026,7 @@ class BotService:
         session: AsyncSession | None,
         chat_id: int,
         availability: bool,
+        user_id: Optional[int] = None,
     ) -> None:
         """Apply availability choice from Change availability flow (button)."""
         item_name = context.user_data.get('availability_item_name')
@@ -964,8 +1039,12 @@ class BotService:
             await self.bot.send_message(chat_id, "Database session not available. Please try again.")
             return
         try:
+            role = await get_user_role(user_id, session, self.settings)
+            creator_filter = user_id if role == "user" else None
             repository = ItemRepository(session)
-            updated = await repository.update_availability(item_name, availability)
+            updated = await repository.update_availability(
+                item_name, availability, chat_id=chat_id, created_by_user_id=creator_filter
+            )
             context.user_data.pop('state', None)
             context.user_data.pop('availability_item_name', None)
             if updated:
@@ -997,7 +1076,7 @@ class BotService:
         context: ContextTypes.DEFAULT_TYPE,
         session: AsyncSession | None,
     ) -> None:
-        """Send test/demo message."""
+        """Send test/demo message (admin only)."""
         clear_flow_state(context)
         chat_id = update.effective_chat.id if update.effective_chat else None
         msg = update.effective_message
@@ -1007,7 +1086,14 @@ class BotService:
             await msg.reply_text("Database session not available. Please try again.")
             return
 
-        logger.info("Test message requested chat_id=%s", chat_id)
+        user_id = update.effective_user.id if update.effective_user else None
+        role = await get_user_role(user_id, session, self.settings)
+        if not is_admin_role(role):
+            await msg.reply_text("You are not authorized to use this command.")
+            logger.warning("Unauthorized test message attempt user_id=%s", user_id)
+            return
+
+        logger.info("Test message requested chat_id=%s user_id=%s", chat_id, user_id)
         demo_item = ItemCreate(
             item_name='My Item',
             item_amount=1,
@@ -1018,7 +1104,7 @@ class BotService:
 
         try:
             repository = ItemRepository(session)
-            item = await repository.create_item(demo_item, chat_id)
+            item = await repository.create_item(demo_item, chat_id, created_by_user_id=user_id)
 
             text = (
                 f'Request is placed for processing:\n'
@@ -1039,38 +1125,294 @@ class BotService:
             await msg.reply_text("Failed to process the request. Please try again later.")
 
     async def handle_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle admin command (placeholder)."""
+        """Handle admin command (admin only)."""
         clear_flow_state(context)
-        chat_id = update.effective_chat.id if update.effective_chat else None
         msg = update.effective_message
-        if msg:
-            logger.info("Admin menu shown chat_id=%s", chat_id)
-            await msg.reply_photo(
-                photo='https://cdn-icons-png.flaticon.com/512/249/249389.png',
-                caption="We're working on it!",
-                protect_content=True,
-            )
-            await msg.reply_text(
-                'What would you like to do next?',
-                reply_markup=self._back_to_menu_keyboard(),
-            )
+        if not msg:
+            return
+        user_id = update.effective_user.id if update.effective_user else None
+        session = context.bot_data.get("current_db_session") if context.bot_data else None
+        role = await get_user_role(user_id, session, self.settings)
+        if not is_admin_role(role):
+            await msg.reply_text("You are not authorized to use this command.")
+            logger.warning("Unauthorized admin menu attempt user_id=%s", user_id)
+            return
+
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        logger.info("Admin menu shown chat_id=%s user_id=%s", chat_id, user_id)
+        await msg.reply_text(
+            'Admin. Manage users or go back.',
+            reply_markup=self._admin_menu_keyboard(),
+        )
+
+    async def _require_admin_and_session(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Return (session, chat_id, msg) if caller is admin and session exists; else None and reply sent."""
+        msg = update.effective_message
+        if not msg:
+            return None, None, None
+        user_id = update.effective_user.id if update.effective_user else None
+        session = context.bot_data.get("current_db_session") if context.bot_data else None
+        role = await get_user_role(user_id, session, self.settings)
+        if not is_admin_role(role):
+            await msg.reply_text("You are not authorized to use this command.")
+            return None, None, None
+        if session is None:
+            await msg.reply_text("Database session not available. Please try again.")
+            return None, None, None
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        return session, chat_id, msg
+
+    async def list_users(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """List all users (admin only)."""
+        session, chat_id, msg = await self._require_admin_and_session(update, context)
+        if session is None or msg is None or chat_id is None:
+            return
+        try:
+            user_repo = UserRepository(session)
+            users = await user_repo.list_users(limit=100)
+            if not users:
+                await msg.reply_text("No users in the database.")
+            else:
+                lines = []
+                for u in users:
+                    role_name = u.role.name if u.role else "?"
+                    lines.append(f"id={u.id} telegram_id={u.telegram_user_id} role={role_name}")
+                await msg.reply_text("Users:\n" + "\n".join(lines))
+            await msg.reply_text("What next?", reply_markup=self._admin_menu_keyboard())
+        except Exception as e:
+            logger.error("Error listing users: %s", type(e).__name__, exc_info=True)
+            await msg.reply_text("An error occurred. Please try again.")
+            await msg.reply_text("What next?", reply_markup=self._admin_menu_keyboard())
+
+    async def start_add_user(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> None:
+        """Start Add user flow: ask for Telegram ID (admin only)."""
+        _, _, msg = await self._require_admin_and_session(update, context)
+        if msg is None:
+            return
+        clear_flow_state(context)
+        context.user_data["state"] = "waiting_for_manage_add_user_id"
+        await self.bot.send_message(
+            chat_id,
+            "Send the Telegram user ID (numeric). Or /cancel to cancel.",
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def process_manage_add_user(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """Process Telegram ID for Add user, then ask for role."""
+        state = context.user_data.get("state")
+        if state != "waiting_for_manage_add_user_id":
+            return
+        msg = update.effective_message
+        if not msg or not update.message or not update.message.text or session is None:
+            return
+        raw = update.message.text.strip()
+        if not raw or not raw.lstrip("-").isdigit():
+            await msg.reply_text("Please send a numeric Telegram user ID. Or /cancel to cancel.")
+            return
+        tid = int(raw)
+        context.user_data["manage_add_telegram_id"] = tid
+        context.user_data["state"] = "waiting_for_manage_add_user_role"
+        await msg.reply_text("Choose role:", reply_markup=self._manage_role_keyboard())
+
+    async def apply_manage_add_user_role(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+        role_name: str,
+    ) -> None:
+        """Create user with stored Telegram ID and chosen role (admin only)."""
+        if session is None:
+            await self.bot.send_message(chat_id, "Database session not available. Please try again.")
+            return
+        tid = context.user_data.get("manage_add_telegram_id")
+        if tid is None:
+            await self.bot.send_message(chat_id, "Session expired. Start over from Admin menu.")
+            clear_flow_state(context)
+            return
+        try:
+            user_repo = UserRepository(session)
+            existing = await user_repo.get_by_telegram_id(tid)
+            if existing:
+                await self.bot.send_message(chat_id, f"User with Telegram ID {tid} already exists.")
+                clear_flow_state(context)
+                await self.bot.send_message(chat_id, "What next?", reply_markup=self._admin_menu_keyboard())
+                return
+            await user_repo.create_user(tid, role_name)
+            clear_flow_state(context)
+            await self.bot.send_message(chat_id, f"User created: telegram_id={tid}, role={role_name}.")
+            await self.bot.send_message(chat_id, "What next?", reply_markup=self._admin_menu_keyboard())
+        except ValueError as e:
+            await self.bot.send_message(chat_id, str(e))
+            clear_flow_state(context)
+            await self.bot.send_message(chat_id, "What next?", reply_markup=self._admin_menu_keyboard())
+        except Exception as e:
+            logger.error("Error creating user: %s", type(e).__name__, exc_info=True)
+            await self.bot.send_message(chat_id, "An error occurred. Please try again.")
+            clear_flow_state(context)
+            await self.bot.send_message(chat_id, "What next?", reply_markup=self._admin_menu_keyboard())
+
+    async def start_set_role(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> None:
+        """Start Set role flow: ask for Telegram ID (admin only)."""
+        _, _, msg = await self._require_admin_and_session(update, context)
+        if msg is None:
+            return
+        clear_flow_state(context)
+        context.user_data["state"] = "waiting_for_manage_set_role_id"
+        await self.bot.send_message(
+            chat_id,
+            "Send the Telegram user ID (numeric). Or /cancel to cancel.",
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def process_manage_set_role(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """Process Telegram ID for Set role, then ask for role."""
+        state = context.user_data.get("state")
+        if state != "waiting_for_manage_set_role_id":
+            return
+        msg = update.effective_message
+        if not msg or not update.message or not update.message.text or session is None:
+            return
+        raw = update.message.text.strip()
+        if not raw or not raw.lstrip("-").isdigit():
+            await msg.reply_text("Please send a numeric Telegram user ID. Or /cancel to cancel.")
+            return
+        tid = int(raw)
+        context.user_data["manage_set_role_telegram_id"] = tid
+        context.user_data["state"] = "waiting_for_manage_set_role_choice"
+        await msg.reply_text("Choose new role:", reply_markup=self._manage_set_role_choice_keyboard())
+
+    async def apply_manage_set_role_choice(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+        role_name: str,
+    ) -> None:
+        """Set role for stored Telegram ID (admin only)."""
+        if session is None:
+            await self.bot.send_message(chat_id, "Database session not available. Please try again.")
+            return
+        tid = context.user_data.get("manage_set_role_telegram_id")
+        if tid is None:
+            await self.bot.send_message(chat_id, "Session expired. Start over from Admin menu.")
+            clear_flow_state(context)
+            return
+        try:
+            user_repo = UserRepository(session)
+            user = await user_repo.set_role(tid, role_name)
+            clear_flow_state(context)
+            if user:
+                await self.bot.send_message(chat_id, f"Role set: telegram_id={tid} -> {role_name}.")
+            else:
+                await self.bot.send_message(chat_id, f"User with Telegram ID {tid} not found.")
+            await self.bot.send_message(chat_id, "What next?", reply_markup=self._admin_menu_keyboard())
+        except ValueError as e:
+            await self.bot.send_message(chat_id, str(e))
+            clear_flow_state(context)
+            await self.bot.send_message(chat_id, "What next?", reply_markup=self._admin_menu_keyboard())
+        except Exception as e:
+            logger.error("Error setting role: %s", type(e).__name__, exc_info=True)
+            await self.bot.send_message(chat_id, "An error occurred. Please try again.")
+            clear_flow_state(context)
+            await self.bot.send_message(chat_id, "What next?", reply_markup=self._admin_menu_keyboard())
+
+    async def start_remove_user(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+        chat_id: int,
+    ) -> None:
+        """Start Remove user flow: ask for Telegram ID (admin only)."""
+        _, _, msg = await self._require_admin_and_session(update, context)
+        if msg is None:
+            return
+        clear_flow_state(context)
+        context.user_data["state"] = "waiting_for_manage_remove_user_id"
+        await self.bot.send_message(
+            chat_id,
+            "Send the Telegram user ID (numeric) to remove. Or /cancel to cancel.",
+            reply_markup=ForceReply(selective=True),
+        )
+
+    async def process_manage_remove_user(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        session: AsyncSession | None,
+    ) -> None:
+        """Process Telegram ID and delete user (admin only)."""
+        state = context.user_data.get("state")
+        if state != "waiting_for_manage_remove_user_id":
+            return
+        msg = update.effective_message
+        if not msg or not update.message or not update.message.text or session is None:
+            return
+        raw = update.message.text.strip()
+        if not raw or not raw.lstrip("-").isdigit():
+            await msg.reply_text("Please send a numeric Telegram user ID. Or /cancel to cancel.")
+            return
+        tid = int(raw)
+        clear_flow_state(context)
+        try:
+            user_repo = UserRepository(session)
+            deleted = await user_repo.delete_user(tid)
+            if deleted:
+                await msg.reply_text(f"User with Telegram ID {tid} removed.")
+            else:
+                await msg.reply_text(f"User with Telegram ID {tid} not found.")
+            await msg.reply_text("What next?", reply_markup=self._admin_menu_keyboard())
+        except Exception as e:
+            logger.error("Error removing user: %s", type(e).__name__, exc_info=True)
+            await msg.reply_text("An error occurred. Please try again.")
+            await msg.reply_text("What next?", reply_markup=self._admin_menu_keyboard())
     
     async def stop_bot(
         self,
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
-        """Stop bot (authorized users only)."""
-        chat_id = update.effective_chat.id if update.effective_chat else None
+        """Stop bot (admin only)."""
         msg = update.effective_message
         if not msg:
             return
-        if chat_id not in self.settings.authorized_ids:
+        user_id = update.effective_user.id if update.effective_user else None
+        session = context.bot_data.get("current_db_session") if context.bot_data else None
+        role = await get_user_role(user_id, session, self.settings)
+        if not is_admin_role(role):
             await msg.reply_text("You are not authorized to use this command.")
-            logger.warning("Unauthorized stop attempt chat_id=%s", chat_id)
+            logger.warning("Unauthorized stop attempt user_id=%s", user_id)
             return
 
-        logger.info("Stop command from authorized user chat_id=%s", chat_id)
+        logger.info("Stop command from admin user_id=%s", user_id)
         await msg.reply_text(
             "Stop requested. In this setup the bot keeps running; your request has been logged."
         )
