@@ -40,8 +40,10 @@ tests/
   conftest.py          # Fixtures (mock_settings, mock_bot, mock_context)
   test_validators.py   # Validators
   test_permissions.py  # get_user_role, is_admin_role, can_manage_item
+  test_encryption.py   # encrypt_value, decrypt_value (round-trip, empty/invalid key or cipher)
   test_app_bot_service.py  # clear_flow_state, keyboards, remove/update/availability flows, apply_update_field_choice, start_*_flow, admin menu
-  test_app_repository.py   # get_item_by_id, update_item, delete_by_name_and_chat
+  test_app_repository.py   # get_item_by_id, update_item, delete_by_name_and_chat, create_item, get_items
+  test_app_user_repository.py  # get_by_telegram_id, list_users, create_user, set_role, delete_user
   test_schemas.py      # ItemCreate, ItemUpdate
 ```
 
@@ -153,15 +155,20 @@ Roles (admin, user) are stored in the database. If a user is not found in the DB
 
 ## Tests
 
+Main app test suite (validators, permissions, schemas, repositories, bot service, encryption):
+
 ```bash
-poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_schemas.py -v
+poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_encryption.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_app_user_repository.py tests/test_schemas.py -v
 ```
 
-Run all tests:
+Run all tests (includes legacy tests for `bot/` and `database/` modules):
 
 ```bash
 poetry run python -m pytest tests/ -v
 ```
+
+Legacy tests in `test_bot.py` and `test_database.py` target the old Telebot-based bot and `database.database` layer; the main app uses FastAPI and `app.database.repository`.  
+Encryption tests (`test_encryption.py`) are skipped if the `cryptography` package is not installed; add `cryptography` to your environment to run them.
 
 ## Logging
 

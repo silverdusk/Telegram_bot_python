@@ -1,4 +1,9 @@
-"""Shared pytest fixtures for app tests."""
+"""Shared pytest fixtures for app tests.
+
+mock_settings is used by: test_app_bot_service, test_schemas, test_validators, test_permissions.
+Other test files may define a local mock_settings for minimal attributes; prefer this fixture
+for consistency.
+"""
 import pytest
 from unittest.mock import MagicMock
 

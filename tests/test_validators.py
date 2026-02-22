@@ -1,6 +1,6 @@
-"""Tests for app.core.validators."""
+"""Tests for app.core.validators. Uses conftest.mock_settings."""
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.core.validators import (
     validate_text_input,
@@ -8,14 +8,6 @@ from app.core.validators import (
     is_float,
     check_working_hours,
 )
-
-
-@pytest.fixture
-def mock_settings():
-    s = MagicMock()
-    s.min_len_str = 1
-    s.max_len_str = 255
-    return s
 
 
 class TestValidateTextInput:

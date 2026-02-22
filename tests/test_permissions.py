@@ -1,17 +1,8 @@
-"""Tests for app.core.permissions."""
+"""Tests for app.core.permissions. Uses conftest.mock_settings (effective_fallback_admin_ids set per test)."""
 import asyncio
-import pytest
 from unittest.mock import MagicMock, AsyncMock
 
 from app.core.permissions import get_user_role, is_admin_role, can_manage_item
-
-
-@pytest.fixture
-def mock_settings():
-    """Settings with effective_fallback_admin_ids (list)."""
-    s = MagicMock()
-    s.effective_fallback_admin_ids = []
-    return s
 
 
 def test_get_user_role_returns_none_when_user_id_none(mock_settings):

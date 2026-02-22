@@ -1,0 +1,4 @@
+2026-02-22 21:25:41 - root - DEBUG - This is a test debug message
+2026-02-22 21:25:41 - root - INFO - This is a test info message
+2026-02-22 21:25:41 - root - ERROR - This is a test error message
+2026-02-22 21:25:41 - root - INFO - Starting bot successfully at: 2026-02-22 21:25:41.301288 UTC

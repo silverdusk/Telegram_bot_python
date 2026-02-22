@@ -1,5 +1,4 @@
 """Encrypt/decrypt sensitive user data (e.g. credentials) at rest."""
-import base64
 import logging
 from typing import Optional
 
@@ -17,8 +16,8 @@ def encrypt_value(plain: str, key_b64: str) -> Optional[str]:
         return None
     try:
         from cryptography.fernet import Fernet
-        raw = base64.b64decode(key_b64)
-        f = Fernet(raw)
+        # Fernet expects the key as URL-safe base64-encoded bytes (not decoded raw bytes)
+        f = Fernet(key_b64.encode())
         return f.encrypt(plain.encode()).decode()
     except Exception as e:
         logger.warning("Encryption failed: %s", e)
@@ -36,8 +35,8 @@ def decrypt_value(cipher: Optional[str], key_b64: str) -> Optional[str]:
         return None
     try:
         from cryptography.fernet import Fernet
-        raw = base64.b64decode(key_b64)
-        f = Fernet(raw)
+        # Fernet expects the key as URL-safe base64-encoded bytes (not decoded raw bytes)
+        f = Fernet(key_b64.encode())
         return f.decrypt(cipher.encode()).decode()
     except Exception as e:
         logger.warning("Decryption failed: %s", e)
