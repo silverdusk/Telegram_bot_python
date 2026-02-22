@@ -1,175 +1,212 @@
 # Telegram Bot Project
 
-This project is a Telegram bot built with Python using the Telebot library.
+A Telegram bot for item management: add items, list them, and update availability. Built with **FastAPI** and **python-telegram-bot** in **webhook** mode.
 
-**→ [Deploy and run on a server (manual)](docs/DEPLOY_MANUAL.md)** It allows users to interact with the bot to perform various tasks, such as adding items to a database, retrieving data from the database, and more.
+**→ [Deploy and run on a server (manual)](docs/DEPLOY_MANUAL.md)**  
+**→ [Deployment guide (Docker, webhook, HTTPS)](DEPLOYMENT.md)**
 
 ## Features
 
-- **Item Management**: Users can add, update, and retrieve items stored in a database through simple chat commands.
-- **Authorization**: The bot can be configured to only accept commands from authorized users or groups.
-- **Flexible Database Queries**: Users can perform flexible database queries, such as retrieving items by name or within a specific time range.
-- **Error Handling**: Comprehensive error handling to ensure a smooth user experience.
+- **Item management**: Add items (name, amount, type, price, availability), get list of your items, change availability by item name.
+- **Conversation flow**: Multi-step Add flow with inline buttons for type and availability; optional text input; cancel with `/cancel`.
+- **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Admin, Change availability, Send test message, Stop).
+- **Validation**: Length and character rules for names; amount/price range checks; working-hours check for Add (configurable).
+- **Authorization**: Stop command restricted to configured user IDs.
+- **Logging**: Structured logging (no secrets or user content in logs).
 
-## Project Structure
+## Project structure
 
-The project is organized into the following modules:
-
-1. `bot.py`: Contains main bot logic.
-2. `database.py`: Contains logic to interact with the database.
-3. `models.py`: Contains the table model.
-4. `validators.py`: Contains methods responsible for validating input.
-
+```
+app/
+  main.py              # FastAPI app, lifespan, routes
+  api/v1/
+    handlers.py        # Command and message handlers, callback routing
+    webhook.py         # POST /webhook/telegram, health
+  core/
+    config.py         # Settings (env / config.json)
+    validators.py     # validate_text_input, is_int, is_float, check_working_hours
+  database/
+    session.py        # Async engine, session
+    repository.py     # Item CRUD
+  services/
+    bot_service.py    # Bot logic: welcome, menu, add/get/availability, keyboards
+  schemas/
+    item.py           # ItemCreate, ItemResponse, ItemUpdate
+database/             # Legacy DB layer (optional)
+bot/                  # Legacy Telebot-based bot (optional)
+tests/
+  conftest.py         # Fixtures (mock_settings, mock_bot, mock_context)
+  test_validators.py  # Validators
+  test_app_bot_service.py  # clear_flow_state, keyboards
+  test_schemas.py     # ItemCreate, ItemUpdate
+```
 
 ## Requirements
 
-- Python 3.10
-- Poetry 
-- Postgres
-- sqlalchemy 2.0.27
-- Pytest
-- Allure
+- Python 3.10+
+- Poetry
+- PostgreSQL 12+
+- For production: HTTPS (Telegram webhooks require TLS)
 
 ## Installation
 
-1. **Clone the Repository**: 
-   Clone this repository to your local machine using the following command:
-    git clone <https://github.com/silverdusk/Telegram_bot_python.git>
-2. **Navigate to the Project Directory**
-3. **Install Python**:
-If you haven't already installed Python, you can download it from [official Python website](https://www.python.org/downloads/).
-4. **Install PIP (if not already installed)**:
-If you haven't already installed PIP, you can download it from [official PIP website](https://pip.pypa.io/en/stable/cli/pip_install/).
-5. **Install Poetry (if not already installed)**:
-If you haven't already installed Poetry, you can do so using pip:
-```Bash
-pip install poetry
-```
-1. **Install Project Dependencies**:
-Use Poetry to install the project dependencies specified in the `pyproject.toml` file using command: `poetry install`
-2. **Set Up Configuration**:
-Set up your configuration settings by creating a `config.json` file in the project directory. You can use the `config.json.example` file from project root directory as a template.
-3. **Set Up Logging**:
-Configure logging according to your preferences by modifying the `logging.ini` file.
-4. **Run the Bot**:
-You're all set! Run the bot using the following command:
-```Bash
-poetry run python bot.py
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/silverdusk/Telegram_bot_python.git
+   cd Telegram_bot_python
+   ```
 
-### Setting Up a PostgreSQL Database and Configuring Server with pgAdmin
+2. **Install dependencies**
+   ```bash
+   poetry install
+   ```
 
-#### Setting Up a PostgreSQL Database and Table
+3. **Configuration**  
+   Either use a **`.env`** file (recommended for Docker and server) or **`config.json`** (legacy/local).
 
-1. **Install PostgreSQL:**
-   - If you haven't already installed PostgreSQL, you can download and install it from the [PostgreSQL website](https://www.postgresql.org/download/).
-   - Follow the installation instructions provided for your operating system.
-
-2. **Create a Database:**
-   - Once PostgreSQL is installed, open pgAdmin or use the command line to access the PostgreSQL shell (`psql`).
-   - In pgAdmin, right-click on "Databases" and select "Create" > "Database".
-   - Enter a name for the database and click "Save".
-   - Alternatively, in the PostgreSQL shell, run the following SQL command to create a database:
-     ```sql
-     CREATE DATABASE database_name;
-     ```
-    Replace `database_name` with the desired name for your database.
-
-3. **Create a Table:**
-   - In pgAdmin, navigate to your newly created database, right-click on "Tables", and select "Create" > "Table".
-   - Enter the table name and define the table columns along with their data types and constraints.
-   - Here's an example SQL query to create the table with the specified fields:
-     ```sql
-     CREATE TABLE my_table (
-         id SERIAL PRIMARY KEY,
-         item_name VARCHAR(255),
-         item_amount INTEGER,
-         item_type VARCHAR(255),
-         item_price NUMERIC,
-         availability BOOLEAN,
-         chat_id BIGINT,
-         timestamp TIMESTAMP WITHOUT TIME ZONE
-     );
-     ```
-   - Execute the query to create the table.
-
-4. **Verify Table Creation:**
-   - Once the table is created, you should see it listed under the "Tables" section in pgAdmin.
-   - You can also verify the table structure by right-clicking on it and selecting "Properties".
-5. **Create a Database User:**
-- It's recommended to create a separate database user with restricted privileges for your project. This enhances security and isolates the access permissions for different applications.
-   - In pgAdmin, in the tree, navigate to "Databases", right-click on "Login/Group Roles", and select "Create" > "Login/Group role".
-   - Enter name of the new user and password.
-   - Here's an example SQL query to create a new database user:
-     ```SQL
-     CREATE USER your_username WITH PASSWORD 'your_password';
-     ```
-   Replace `your_username` with the desired username and `your_password` with the desired password for the user.
-
-6. **Grant Privileges:**
-   - After creating the database user, you need to grant necessary privileges to the user on the database you created.
-   - Use the following command to grant all privileges on the database to the user:
-     ```SQL
-     GRANT ALL PRIVILEGES ON DATABASE your_database_name TO your_username;
-     ```
-   Replace `your_database_name` and `your_username` with the appropriate values.
-
-7. **Grant Permissions:**
-- Because the table uses a sequential column (for example, "id SERIAL PRIMARY KEY"), you may need to grant usage on the associated sequence.
-   - Use the following command to grant permissions to your user:
-     ```SQL
-     GRANT USAGE ON SEQUENCE your_database_name_id_seq TO your_username;
-     ```
-#### Configuring PostgreSQL Server with pgAdmin
-
-1. **Install pgAdmin:**
-   - If you haven't already installed pgAdmin, you can download and install it from the [pgAdmin website](https://www.pgadmin.org/download/).
-   - Follow the installation instructions provided for your operating system.
-
-2. **Access pgAdmin:**
-   - Once pgAdmin is installed, open the application. It usually opens in your default web browser.
-
-3. **Add PostgreSQL Server:**
-   - In pgAdmin, click on the "Add New Server" icon or go to the "File" menu and select "Add Server".
-   - Enter a name for the server in the "Name" field.
-   - In the "Connection" tab:
-     - Enter "localhost" or the IP address of your PostgreSQL server in the "Host name/address" field.
-     - Enter the port number (default is 5432) in the "Port" field.
-     - Enter the username and password you set up during PostgreSQL installation in the "Username" and "Password" fields, respectively.
-   - Click "Save" to add the server.
-
-4. **Connect to the Server:**
-   - After adding the server, you should see it listed in the pgAdmin interface.
-   - Click on the server name to connect to it. You may be prompted to enter the password again.
-
-5. **Explore Databases:**
-   - Once connected, you can explore the databases on the server by expanding the server name in the navigation pane.
-   - You should see a list of databases, including the one you created for your project.
-
-6. **Manage Databases and Objects:**
-   - pgAdmin provides a user-friendly interface for managing databases, tables, and other database objects.
-   - You can perform various tasks such as creating tables, executing SQL queries, and managing user permissions directly from pgAdmin.
-
-7. **Verify Configuration:**
-   - Verify that you can connect to the PostgreSQL server and access your database from pgAdmin.
-   - Ensure that you can perform necessary database operations using pgAdmin, such as creating tables and inserting data.
-
-8. **Verify Setup (optional):**
-   - After completing the above steps, you can verify the database setup by connecting to the database using the newly created user credentials:
+   - **Option A – .env**  
+     Copy the example and set at least `BOT_TOKEN` and database settings:
      ```bash
-     psql -U your_username -d your_database_name -h localhost -W
+     cp .env.example .env
+     # Edit .env: BOT_TOKEN, DATABASE (or DATABASE__DB_NAME, DATABASE__USER, etc.)
      ```
-   You will be prompted to enter the password for the user. If the connection is successful, you will be logged into the PostgreSQL database prompt.
+     For webhook on a server, set `WEBHOOK_URL` and optionally `WEBHOOK_SECRET_TOKEN`.
 
-9. **Update Configuration:**
-   - In your project's configuration file (`config.json`), update the database connection settings to reflect the database name, username, password, and host (`localhost` if running locally).
+   - **Option B – config.json**  
+     If `config.json` exists in the project root, it takes precedence. Use `config.json.example` as a template.
 
-10. **Testing Connection:**
-    - Before running your application, ensure that it can connect to the PostgreSQL database using the updated configuration. You can test the database connection by attempting to connect from your application code or using a database client.
+4. **Database**  
+   Create a PostgreSQL database and table (see [PostgreSQL setup](#postgresql-setup) below). The app can create tables on startup if `CREATE_TABLES_ON_STARTUP` is true (default).
 
-By following these steps, you can set up a PostgreSQL database for your project and configure your application to interact with it appropriately. Make sure to document any specific requirements or configurations relevant to your project in the README.md file for reference.
+## Running
+
+### Local (development)
+
+```bash
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Or:
+
+```bash
+poetry run python -m app.main
+```
+
+For production you must run behind HTTPS and set the Telegram webhook (see [DEPLOYMENT.md](DEPLOYMENT.md)).
+
+### Docker
+
+```bash
+# With PostgreSQL in Docker
+docker compose up -d
+
+# App only (use existing DB)
+# Set DATABASE__HOST etc. in .env
+docker compose -f docker-compose.app-only.yml up -d
+```
+
+- App: `http://localhost:8000`
+- Health: `http://localhost:8000/webhook/health`
+
+### Webhook
+
+Telegram must send updates to your server. After the app is reachable over **HTTPS**:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://your-domain.com/webhook/telegram", "secret_token": "YOUR_WEBHOOK_SECRET_TOKEN"}'
+```
+
+Leave `WEBHOOK_SECRET_TOKEN` empty in `.env` if you do not use a secret.
+
+**Important – secret token and 403:**  
+If you set the webhook **without** a secret (no `secret_token` in the `curl` above), you must **remove or leave empty** `WEBHOOK_SECRET_TOKEN` in `.env` and restart the app. If the app has a secret set but Telegram sends requests without it (or with a different one), the app returns **403** and the bot will not reply even though the webhook is called. See [DEPLOYMENT.md – Troubleshooting](DEPLOYMENT.md#8-troubleshooting) for more.
 
 ## Configuration
 
-- `BOT_TOKEN`: Your Telegram bot token obtained from the BotFather.
-- `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: Database connection details.
+Main variables (env or `config.json`):
+
+| Variable | Description |
+|----------|-------------|
+| `BOT_TOKEN` | Telegram bot token (required) |
+| `DATABASE__*` or `DATABASE` | DB name, user, password, host, port, table_name |
+| `AUTHORIZED_IDS` | JSON array of Telegram user IDs allowed to use Stop |
+| `ALLOWED_TYPES` | Item types, e.g. `["spare part", "miscellaneous"]` |
+| `MIN_LEN_STR`, `MAX_LEN_STR` | Min/max length for text fields (default 1, 255) |
+| `MAX_ITEM_AMOUNT`, `MAX_ITEM_PRICE` | Upper bounds for amount and price |
+| `SKIP_WORKING_HOURS` | If true, Add is allowed anytime |
+| `WEBHOOK_URL` | Full URL for webhook (e.g. `https://your-domain.com/webhook/telegram`) |
+| `WEBHOOK_SECRET_TOKEN` | Optional secret for webhook verification |
+
+See `.env.example` for a full list.
+
+## Tests
+
+```bash
+poetry run python -m pytest tests/test_validators.py tests/test_app_bot_service.py tests/test_schemas.py -v
+```
+
+Run all tests:
+
+```bash
+poetry run python -m pytest tests/ -v
+```
+
+## Logging
+
+- Default: stdout with level INFO. In Docker, logs go to the console and optionally to `/app/logs/log.log` if configured.
+- Optional: put `logging.ini` in the project root to customize format and handlers.
+
+## PostgreSQL setup
+
+1. Create a database and user, then a table, for example:
+
+   ```sql
+   CREATE DATABASE telegram_bot;
+   CREATE USER botuser WITH PASSWORD 'your_password';
+   GRANT ALL PRIVILEGES ON DATABASE telegram_bot TO botuser;
+   ```
+
+2. Create the table (or let the app create it on startup):
+
+   ```sql
+   CREATE TABLE organizer_table (
+       id SERIAL PRIMARY KEY,
+       item_name VARCHAR(255),
+       item_amount INTEGER,
+       item_type VARCHAR(255),
+       item_price NUMERIC,
+       availability BOOLEAN,
+       chat_id BIGINT,
+       timestamp TIMESTAMP WITHOUT TIME ZONE
+   );
+   GRANT ALL ON TABLE organizer_table TO botuser;
+   GRANT USAGE, SELECT ON SEQUENCE organizer_table_id_seq TO botuser;
+   ```
+
+3. Set in `.env` (or equivalent):
+
+   - `DATABASE__DB_NAME=telegram_bot`
+   - `DATABASE__USER=botuser`
+   - `DATABASE__PASSWORD=...`
+   - `DATABASE__HOST=localhost` (or `db` in Docker)
+   - `DATABASE__PORT=5432`
+   - `DATABASE__TABLE_NAME=organizer_table`
+
+For a more detailed PostgreSQL and pgAdmin setup, see the previous version of this README or your deployment notes.
+
+## Troubleshooting (webhook)
+
+- **Bot doesn’t respond to /start or commands**  
+  1. Confirm the webhook is set: `curl -s "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"` (see `result.url`).  
+  2. Confirm the app is reachable: `curl -X POST https://your-domain.com/webhook/telegram -H "Content-Type: application/json" -d '{}'` (you should get a JSON response, not a connection error).  
+  3. **403 from webhook** → Secret token mismatch: if you registered the webhook without a secret, remove or leave empty `WEBHOOK_SECRET_TOKEN` in `.env` and recreate/restart the app container so the new env is loaded.  
+- More details: [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#8-troubleshooting).
+
+## Documentation
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** – Docker, webhook, HTTPS, checklist.
+- **[docs/DEPLOY_MANUAL.md](docs/DEPLOY_MANUAL.md)** – Manual server deployment.
+- **[docs/DIALOGUE_FLOW_REVIEW.md](docs/DIALOGUE_FLOW_REVIEW.md)** – Dialogue flow and improvement notes.
+- **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** – Moving from Telebot to FastAPI/webhook.
