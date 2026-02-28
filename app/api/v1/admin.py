@@ -129,7 +129,7 @@ async def login_submit(request: Request):
         )
 
     token = _create_token(username)
-    response = RedirectResponse(url="/admin", status_code=303)
+    response = RedirectResponse(url="/admin?welcome=1", status_code=303)
     response.set_cookie(
         key="admin_token",
         value=token,
