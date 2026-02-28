@@ -20,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
 from app.database.repository import UserRepository
-from app.database.session import AsyncSessionLocal
+from app.database.session import get_db_session
 from database.models import Item, User
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
 # ── DB session helper ──────────────────────────────────────────────────────────
 
 async def _get_session():
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         yield session
 
 
@@ -106,7 +106,7 @@ async def login_page(request: Request):
     token = request.cookies.get("admin_token")
     if _validate_token(token):
         return RedirectResponse(url="/admin", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "login.html", {"error": None})
 
 
 @admin_router.post("/login")
@@ -123,8 +123,8 @@ async def login_submit(request: Request):
     )
     if not valid:
         return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Invalid username or password."},
+            request, "login.html",
+            {"error": "Invalid username or password."},
             status_code=401,
         )
 
@@ -153,7 +153,7 @@ async def logout():
 @admin_router.get("", response_class=HTMLResponse)
 @admin_router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         total_users = (await session.execute(select(func.count()).select_from(User))).scalar() or 0
         total_items = (await session.execute(select(func.count()).select_from(Item))).scalar() or 0
         available_items = (
@@ -161,9 +161,8 @@ async def dashboard(request: Request):
         ).scalar() or 0
 
     return templates.TemplateResponse(
-        "dashboard.html",
+        request, "dashboard.html",
         {
-            "request": request,
             "active": "dashboard",
             "total_users": total_users,
             "total_items": total_items,
@@ -176,12 +175,12 @@ async def dashboard(request: Request):
 
 @admin_router.get("/users", response_class=HTMLResponse)
 async def users_page(request: Request):
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         user_repo = UserRepository(session)
         users = await user_repo.list_users()
     return templates.TemplateResponse(
-        "users.html",
-        {"request": request, "active": "users", "users": users},
+        request, "users.html",
+        {"active": "users", "users": users},
     )
 
 
@@ -196,7 +195,7 @@ async def add_user(request: Request):
     except (ValueError, TypeError):
         return _redirect("/admin/users", "Invalid input.", "error")
 
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         user_repo = UserRepository(session)
         existing = await user_repo.get_by_telegram_id(telegram_id)
         if existing:
@@ -222,7 +221,7 @@ async def set_user_role(request: Request):
     except (ValueError, TypeError):
         return _redirect("/admin/users", "Invalid input.", "error")
 
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         user_repo = UserRepository(session)
         user = await user_repo.set_role(telegram_id, role)
         if not user:
@@ -240,7 +239,7 @@ async def delete_user(request: Request):
     except (ValueError, TypeError):
         return _redirect("/admin/users", "Invalid input.", "error")
 
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         user_repo = UserRepository(session)
         deleted = await user_repo.delete_user(telegram_id)
         if not deleted:
@@ -271,7 +270,7 @@ async def items_page(
     elif avail == "no":
         filters.append(Item.availability.is_(False))
 
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         count_q = select(func.count()).select_from(Item)
         if filters:
             from sqlalchemy import and_
@@ -289,9 +288,8 @@ async def items_page(
         items = list((await session.execute(items_q)).scalars().all())
 
     return templates.TemplateResponse(
-        "items.html",
+        request, "items.html",
         {
-            "request": request,
             "active": "items",
             "items": items,
             "page": page,
@@ -310,9 +308,8 @@ async def items_page(
 async def settings_page(request: Request):
     settings = get_settings()
     return templates.TemplateResponse(
-        "settings.html",
+        request, "settings.html",
         {
-            "request": request,
             "active": "settings",
             "settings": settings,
             "allowed_types_str": "\n".join(settings.allowed_types),
@@ -344,9 +341,8 @@ async def save_settings(request: Request):
     except (ValueError, TypeError) as e:
         settings = get_settings()
         return templates.TemplateResponse(
-            "settings.html",
+            request, "settings.html",
             {
-                "request": request,
                 "active": "settings",
                 "settings": settings,
                 "allowed_types_str": "\n".join(settings.allowed_types),

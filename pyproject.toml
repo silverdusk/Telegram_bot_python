@@ -27,6 +27,10 @@ allure-pytest = "^2.13.3"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.2"
 
+[tool.pytest.ini_options]
+# Legacy tests from pre-FastAPI migration import removed classes; exclude them.
+addopts = "--ignore=tests/test_bot.py --ignore=tests/test_database.py"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

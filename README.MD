@@ -12,16 +12,18 @@ A Telegram bot for item management: add, list, update, and remove items; change 
 - **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Remove item, Update item, Admin, Change availability, Send test message, Stop).
 - **Validation**: Length and character rules for names; amount/price range checks; working-hours check for Add (configurable).
 - **Authorization and roles**: Roles (admin, user) are stored in the database; user data encryption is mandatory (Fernet key in config). A **fallback admin** list (e.g. `AUTHORIZED_IDS` or `FALLBACK_ADMIN_IDS`) is used when a user is not in the DB or the DB is unavailable, so admins retain access. **Admin**: Stop, Admin menu, Send test message, manage all items, and manage users (list, add, set role, remove). **User**: Can update or delete only items they created.
+- **Web admin panel**: Browser-based UI at `/admin` — dashboard (user/item counts), user management (add, change role, delete), paginated item browser with search and availability filter, bot settings editor (persists to `config.json` or `.env`). Protected by username/password login with httponly JWT cookie.
 - **Logging**: Structured logging (no secrets or user content in logs).
 
 ## Project structure
 
 ```
 app/
-  main.py              # FastAPI app, lifespan, routes
+  main.py              # FastAPI app, lifespan, routes, static files
   api/v1/
     handlers.py        # Command and message handlers, callback routing
     webhook.py         # POST /webhook/telegram, health
+    admin.py           # Web admin panel routes + auth middleware
   core/
     config.py          # Settings (env / config.json)
     validators.py      # validate_text_input, is_int, is_float, check_working_hours
@@ -34,6 +36,15 @@ app/
     bot_service.py     # Bot logic: welcome, menu, add/get/update/remove/availability, admin menu, manage users, keyboards
   schemas/
     item.py            # ItemCreate, ItemResponse, ItemUpdate
+  static/
+    admin.css          # Web admin panel styles
+  templates/           # Jinja2 HTML templates
+    base.html          # Layout with nav and flash messages
+    login.html         # Admin login page
+    dashboard.html     # Stats dashboard
+    users.html         # User management
+    items.html         # Paginated item browser
+    settings.html      # Bot settings editor
 database/              # Legacy DB layer (optional)
 bot/                   # Legacy Telebot-based bot (optional)
 tests/
@@ -45,6 +56,7 @@ tests/
   test_app_repository.py   # get_item_by_id, update_item, delete_by_name_and_chat, create_item, get_items
   test_app_user_repository.py  # get_by_telegram_id, list_users, create_user, set_role, delete_user
   test_schemas.py      # ItemCreate, ItemUpdate
+  test_admin.py        # Admin panel JWT, middleware, login/logout, dashboard, users CRUD, items, settings
 ```
 
 ## Requirements
@@ -113,6 +125,7 @@ docker compose -f docker-compose.app-only.yml up -d
 
 - App: `http://localhost:8000`
 - Health: `http://localhost:8000/webhook/health`
+- Admin panel: `https://your-domain.com/admin` (requires HTTPS and `WEB_ADMIN_PASSWORD` in `.env`)
 
 ### Webhook
 
@@ -146,6 +159,9 @@ Main variables (env or `config.json`):
 | `SKIP_WORKING_HOURS` | If true, Add is allowed anytime |
 | `WEBHOOK_URL` | Full URL for webhook (e.g. `https://your-domain.com/webhook/telegram`) |
 | `WEBHOOK_SECRET_TOKEN` | Optional secret for webhook verification |
+| `WEB_ADMIN_USER` | Admin panel login username (default: `admin`) |
+| `WEB_ADMIN_PASSWORD` | Admin panel password — **must be set**; panel login is disabled if empty |
+| `WEB_ADMIN_JWT_SECRET` | JWT cookie secret; set to a fixed value so sessions survive restarts (random per-restart if unset) |
 
 See `.env.example` for a full list.
 
@@ -155,19 +171,20 @@ Roles (admin, user) are stored in the database. If a user is not found in the DB
 
 ## Tests
 
-Main app test suite (validators, permissions, schemas, repositories, bot service, encryption):
+Run all 155 tests:
 
 ```bash
-poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_encryption.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_app_user_repository.py tests/test_schemas.py -v
+poetry run pytest          # legacy test_bot.py and test_database.py are excluded automatically
+poetry run pytest -v       # verbose output
 ```
 
-Run all tests (includes legacy tests for `bot/` and `database/` modules):
+Or target specific suites:
 
 ```bash
-poetry run python -m pytest tests/ -v
+poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_encryption.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_app_user_repository.py tests/test_schemas.py tests/test_admin.py -v
 ```
 
-Legacy tests in `test_bot.py` and `test_database.py` target the old Telebot-based bot and `database.database` layer; the main app uses FastAPI and `app.database.repository`.  
+`test_bot.py` and `test_database.py` import removed legacy classes and are excluded via `pyproject.toml` (`addopts = "--ignore=..."`).
 Encryption tests (`test_encryption.py`) are skipped if the `cryptography` package is not installed; add `cryptography` to your environment to run them.
 
 ## Logging
@@ -224,7 +241,7 @@ For a more detailed PostgreSQL and pgAdmin setup, see the previous version of th
   1. Confirm the webhook is set: `curl -s "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"` (see `result.url`).  
   2. Confirm the app is reachable: `curl -X POST https://your-domain.com/webhook/telegram -H "Content-Type: application/json" -d '{}'` (you should get a JSON response, not a connection error).  
   3. **403 from webhook** → Secret token mismatch: if you registered the webhook without a secret, remove or leave empty `WEBHOOK_SECRET_TOKEN` in `.env` and recreate/restart the app container so the new env is loaded.  
-- More: [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#8-troubleshooting).
+- More: [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#9-troubleshooting).
 
 ## Documentation
 

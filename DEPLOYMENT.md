@@ -43,14 +43,19 @@ export DATABASE__TABLE_NAME=organizer_table
 export WEBHOOK_URL=https://your-domain.com/webhook/telegram
 export WEBHOOK_SECRET_TOKEN=random_secret_string
 export ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# Web admin panel
+export WEB_ADMIN_USER=admin
+export WEB_ADMIN_PASSWORD=your_strong_admin_password
+export WEB_ADMIN_JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 
 docker compose up -d
 ```
 
 > **Important:** `ENCRYPTION_KEY` is required. The app will refuse to start if it is missing. Generate it once and store it securely — changing or losing the key makes all previously encrypted data in the database unreadable.
 
-App: `http://localhost:8000`  
+App: `http://localhost:8000`
 Health: `http://localhost:8000/webhook/health`
+Admin: `https://your-domain.com/admin`
 
 ### Run app only (external database)
 
@@ -76,7 +81,35 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 
 3. Your server must expose `https://your-domain.com/webhook/telegram` and forward to the app (e.g. reverse proxy to `http://127.0.0.1:8000`).
 
-## 4. Reverse proxy (HTTPS)
+## 4. Web admin panel
+
+The app serves a browser-based admin UI at `/admin`.
+
+### Access
+
+Once the app is behind HTTPS, visit `https://your-domain.com/admin` and log in with the credentials from `.env`:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `WEB_ADMIN_USER` | `admin` | Login username |
+| `WEB_ADMIN_PASSWORD` | *(empty — panel disabled)* | **Must be set** for login to work |
+| `WEB_ADMIN_JWT_SECRET` | random per restart | Set to a fixed value so sessions survive restarts |
+
+```bash
+# Generate a strong JWT secret (do once, save to .env)
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### Features
+
+- **Dashboard** — total users, items, available items
+- **Users** — list, add, change role (admin/user), delete
+- **Items** — paginated table with name search and availability filter
+- **Settings** — edit `allowed_types`, string length limits, `max_item_amount`, `max_item_price`, `skip_working_hours`; changes are persisted to `config.json` (if present) or `.env`
+
+> Session cookies are `httponly` and `secure` (8-hour expiry). The panel relies on the app being served over HTTPS.
+
+## 5. Reverse proxy (HTTPS)
 
 Example with **nginx** in front of the app:
 
@@ -109,7 +142,7 @@ server {
 
 Reload nginx and ensure the app is listening on `0.0.0.0:8000` (default).
 
-## 5. Deploy without Docker (systemd)
+## 6. Deploy without Docker (systemd)
 
 ```bash
 # Install Python 3.10+, Poetry, PostgreSQL client libs
@@ -147,7 +180,7 @@ sudo systemctl start telegram-bot
 sudo systemctl status telegram-bot
 ```
 
-## 6. Production checklist
+## 7. Production checklist
 
 - [ ] `DEBUG=false` (or unset)
 - [ ] Strong `DATABASE__PASSWORD` and `WEBHOOK_SECRET_TOKEN`
@@ -157,14 +190,16 @@ sudo systemctl status telegram-bot
 - [ ] CORS: if needed, restrict `CORS_ORIGINS` in `.env`
 - [ ] Logs: ensure `logs/` is writable or use stdout (Docker logs)
 - [ ] DB: backups and schema migrations applied before deploying new image (see section 9)
+- [ ] `WEB_ADMIN_PASSWORD` set to a strong value (panel is effectively disabled if left empty)
+- [ ] `WEB_ADMIN_JWT_SECRET` set to a fixed value so admin sessions survive app restarts
 
-## 7. Health and monitoring
+## 8. Health and monitoring
 
 - **Liveness**: `GET /webhook/health` → `200` and `{"status":"ok"}`
 - Docker HEALTHCHECK and systemd `Restart=always` use this endpoint.
 - Optionally add Prometheus/metrics later.
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 - **502 Bad Gateway from nginx**: The app is not running or crashed on startup. Check `docker logs <container>` — startup failures are logged as `CRITICAL` before the process exits.
 - **App exits immediately with no logs**: All logs go to `logs/log.log` inside the container by default. Run the container with a shell to read the file: `docker run --rm --env-file .env <image> sh -c "python -m uvicorn app.main:app || cat logs/log.log"`.
@@ -177,8 +212,11 @@ sudo systemctl status telegram-bot
 - **Webhook not receiving updates**: Check HTTPS, URL path `/webhook/telegram`, and firewall. Test with `curl -X POST https://your-domain.com/webhook/telegram -H "Content-Type: application/json" -d '{}'` (should return JSON, not a connection error).
 - **DB connection errors**: Verify `DATABASE__HOST`, `DATABASE__PORT`, credentials, and that PostgreSQL allows connections from the app host. When running in Docker, `DATABASE__HOST` must be the container name (e.g. `db`), not `localhost`.
 - **403 on webhook**: Ensure `X-Telegram-Bot-Api-Secret-Token` matches `WEBHOOK_SECRET_TOKEN` (or leave secret token empty for no verification).
+- **Admin panel login always fails**: Ensure `WEB_ADMIN_PASSWORD` is set in `.env` (the default is empty, which disables login). Check that `WEB_ADMIN_USER` matches what you enter in the form.
+- **Admin panel redirects to login after every page load**: `WEB_ADMIN_JWT_SECRET` is not set, so it randomizes on every restart and invalidates all cookies. Set it to a fixed value in `.env`.
+- **`/admin` returns 404**: The app version does not include the admin panel, or the router was not registered. Pull the latest code and rebuild the image.
 
-## 9. Database schema migrations
+## 10. Database schema migrations
 
 `CREATE_TABLES_ON_STARTUP=true` (default) creates **new** tables automatically but **never modifies existing ones**. When a model gains a new column, you must apply the change manually before deploying the new image:
 
@@ -198,4 +236,4 @@ ALTER TABLE <table_name> ADD COLUMN IF NOT EXISTS <column_name> <type>;
 2. For each new column, run the corresponding `ALTER TABLE` on the live DB.
 3. Deploy the new image (`docker compose up -d --build app`).
 
-For a fully automated approach, consider adopting **Alembic** (see `MIGRATION_GUIDE.md`).
+For a fully automated approach, consider adopting **Alembic** (see [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)).

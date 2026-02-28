@@ -10,18 +10,20 @@ This guide explains the changes made to convert the Telegram bot from `pyTelegra
 
 ### 2. Dependencies
 - Removed: `pyTelegramBotAPI`
-- Added: `fastapi`, `uvicorn`, `python-telegram-bot`, `asyncpg`, `pydantic`, `pydantic-settings`, `pytz`
+- Added: `fastapi`, `uvicorn`, `python-telegram-bot`, `asyncpg`, `pydantic`, `pydantic-settings`, `pytz`, `jinja2`, `PyJWT`, `cryptography`
 
 ### 3. Project Structure
 ```
 app/
 ├── api/
 │   └── v1/
-│       ├── webhook.py      # Webhook endpoint
-│       └── handlers.py     # Bot handlers
+│       ├── webhook.py      # Telegram webhook endpoint
+│       ├── handlers.py     # Bot handlers
+│       └── admin.py        # Web admin panel routes + auth middleware
 ├── core/
 │   ├── config.py           # Pydantic settings
 │   ├── dependencies.py     # FastAPI dependencies
+│   ├── permissions.py      # Role/permission helpers
 │   └── validators.py       # Input validation
 ├── database/
 │   ├── session.py          # Async database session
@@ -30,6 +32,15 @@ app/
 │   └── item.py             # Pydantic schemas
 ├── services/
 │   └── bot_service.py      # Bot business logic
+├── static/
+│   └── admin.css           # Web admin panel styles
+├── templates/              # Jinja2 HTML templates
+│   ├── base.html
+│   ├── login.html
+│   ├── dashboard.html
+│   ├── users.html
+│   ├── items.html
+│   └── settings.html
 └── main.py                 # FastAPI application
 ```
 
@@ -115,9 +126,23 @@ asyncio.run(set_webhook())
 
 ## API Endpoints
 
+### Telegram bot
 - `GET /` - Root endpoint
 - `POST /webhook/telegram` - Telegram webhook endpoint
 - `GET /webhook/health` - Health check endpoint
+
+### Web admin panel
+- `GET /admin/login` — Login page
+- `POST /admin/login` — Authenticate (sets httponly JWT cookie)
+- `POST /admin/logout` — Logout (clears cookie)
+- `GET /admin` — Dashboard (user/item counts)
+- `GET /admin/users` — List users
+- `POST /admin/users` — Add user
+- `POST /admin/users/role` — Change user role
+- `POST /admin/users/delete` — Delete user
+- `GET /admin/items` — Browse items (paginated)
+- `GET /admin/settings` — View bot settings
+- `POST /admin/settings` — Save bot settings
 
 ## Key Improvements
 
@@ -127,6 +152,7 @@ asyncio.run(set_webhook())
 4. **Repository Pattern**: Better database abstraction
 5. **Webhook Support**: More scalable than polling
 6. **FastAPI Features**: Automatic API documentation, validation, etc.
+7. **Web Admin Panel**: Browser-based UI for user management, item browsing, and settings
 
 ## Testing
 
@@ -134,6 +160,15 @@ The application can be tested using:
 - FastAPI automatic docs at `http://localhost:8000/docs`
 - Health check endpoint: `http://localhost:8000/webhook/health`
 - Telegram webhook endpoint: `http://localhost:8000/webhook/telegram`
+- Web admin panel: `http://localhost:8000/admin`
+
+Run the test suite:
+```bash
+poetry run pytest          # 155 tests (excludes legacy test_bot.py, test_database.py)
+poetry run pytest -v       # verbose output
+```
+
+Legacy test files `tests/test_bot.py` and `tests/test_database.py` are excluded via `pyproject.toml` — they reference the old `pyTelegramBotAPI` classes that no longer exist.
 
 ## Notes
 

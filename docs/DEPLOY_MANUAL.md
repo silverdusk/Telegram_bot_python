@@ -82,6 +82,17 @@ WEBHOOK_URL=https://your-domain.com/webhook/telegram
 WEBHOOK_SECRET_TOKEN=some_random_secret_string
 ```
 
+For the web admin panel, add:
+
+```env
+WEB_ADMIN_USER=admin
+WEB_ADMIN_PASSWORD=your_strong_admin_password
+# Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+WEB_ADMIN_JWT_SECRET=your_random_hex_secret
+```
+
+> If `WEB_ADMIN_PASSWORD` is left empty, the admin login will always fail (panel is effectively disabled).
+
 Save and exit.
 
 ### Step 4: Build and run with Docker Compose
@@ -108,6 +119,8 @@ curl http://127.0.0.1:8000/webhook/health
 ```
 
 You should see JSON responses.
+
+After setting up HTTPS (Step 6), the web admin panel is available at `https://your-domain.com/admin`.
 
 ### Step 6: Expose the app (for webhook)
 
@@ -388,9 +401,13 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 | `DATABASE__HOST` | Yes | `db` (Docker) or hostname/IP |
 | `DATABASE__PORT` | Yes | `5432` |
 | `DATABASE__TABLE_NAME` | Yes | `organizer_table` |
+| `ENCRYPTION_KEY` | Yes | Fernet key (see DEPLOYMENT.md §2) |
 | `WEBHOOK_URL` | For webhook | `https://your-domain.com/webhook/telegram` |
 | `WEBHOOK_SECRET_TOKEN` | Recommended | Random string |
 | `DEBUG` | No | `false` in production |
+| `WEB_ADMIN_USER` | No | `admin` (default) |
+| `WEB_ADMIN_PASSWORD` | For admin panel | Strong password — panel disabled if empty |
+| `WEB_ADMIN_JWT_SECRET` | Recommended | 64-char hex string (`secrets.token_hex(32)`) |
 
 ---
 
@@ -400,6 +417,8 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 - **Database connection error:** Check `DATABASE__HOST`, `DATABASE__PORT`, user/password, and that PostgreSQL allows connections from the app (firewall, `pg_hba.conf`).
 - **Webhook not receiving updates:** Bot must be reachable over **HTTPS** at `WEBHOOK_URL`. Test: `curl -X POST https://your-domain.com/webhook/telegram -H "Content-Type: application/json" -d '{}'` — you should get a JSON response, not a connection error.
 - **403 on webhook:** The header `X-Telegram-Bot-Api-Secret-Token` must match `WEBHOOK_SECRET_TOKEN` in `.env` (or leave both empty to disable verification).
+- **Admin panel login always fails:** Ensure `WEB_ADMIN_PASSWORD` is set in `.env`. The default is empty, which disables login. Also verify `WEB_ADMIN_USER` matches the username you enter.
+- **Admin panel logs out on every restart:** `WEB_ADMIN_JWT_SECRET` is not set — a new random secret is generated each startup, invalidating all cookies. Set it to a fixed value in `.env`.
 
 ---
 
@@ -411,5 +430,6 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 4. Put app behind **HTTPS** (e.g. Nginx + Let’s Encrypt).
 5. Set Telegram webhook to `https://your-domain.com/webhook/telegram`.
 6. Check health: `curl https://your-domain.com/webhook/health`.
+7. Access admin panel: `https://your-domain.com/admin` (requires `WEB_ADMIN_PASSWORD` in `.env`).
 
 After that, the bot runs on the server and receives updates via the webhook.
