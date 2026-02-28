@@ -95,8 +95,12 @@ async def ensure_indexes() -> None:
     async with engine.begin() as conn:
         for stmt in _ORGANIZER_INDEXES_SQL.strip().split(";"):
             stmt = stmt.strip()
-            if stmt:
+            if not stmt:
+                continue
+            try:
                 await conn.execute(text(stmt))
+            except Exception as e:
+                logger.warning("Could not create index (schema may need migration): %s", e)
     logger.info("Database indexes ensured")
 
 

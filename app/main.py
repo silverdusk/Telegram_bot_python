@@ -28,21 +28,25 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info("Starting application...")
-    settings = get_settings()
-    # Initialize database
-    init_db()
-    if settings.create_tables_on_startup:
-        await create_tables()
-        await seed_roles()
-        await ensure_indexes()
-        logger.info("Database tables created")
-    else:
-        await ensure_indexes()
-    logger.info("Database initialized")
+    try:
+        settings = get_settings()
+        # Initialize database
+        init_db()
+        if settings.create_tables_on_startup:
+            await create_tables()
+            await seed_roles()
+            await ensure_indexes()
+            logger.info("Database tables created")
+        else:
+            await ensure_indexes()
+        logger.info("Database initialized")
 
-    # Initialize Telegram bot application (webhook mode)
-    await get_bot_application()
-    logger.info("Telegram bot application ready")
+        # Initialize Telegram bot application (webhook mode)
+        await get_bot_application()
+        logger.info("Telegram bot application ready")
+    except Exception:
+        logger.critical("Startup failed", exc_info=True)
+        raise
 
     yield
     
