@@ -56,14 +56,14 @@ Create a `.env` file or use `config.json` (backward compatible):
 ```json
 {
   "bot_token": "YOUR_BOT_TOKEN",
+  "encryption_key": "YOUR_FERNET_KEY",
   "database": {
     "db_name": "your_db",
     "user": "your_user",
     "password": "your_password",
     "host": "localhost",
     "port": 5432,
-    "table_name": "organizer_table",
-    "db_url": "postgresql+asyncpg://user:password@host:port/db_name"
+    "table_name": "organizer_table"
   },
   "authorized_ids": [1234567890],
   "min_len_str": 1,
@@ -74,6 +74,12 @@ Create a `.env` file or use `config.json` (backward compatible):
   "webhook_secret_token": "your_secret_token"
 }
 ```
+
+> `encryption_key` is **required**. Generate one with:
+> ```bash
+> python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+> ```
+> Store it securely — it is used to encrypt sensitive user data at rest. Changing or losing it makes existing encrypted data unreadable.
 
 ### 3. Run the Application
 ```bash
@@ -135,4 +141,14 @@ The application can be tested using:
 - Database models have been updated to use SQLAlchemy 2.0 async patterns
 - All handlers are now async functions
 - Configuration supports both JSON file and environment variables
+
+## Schema migration history
+
+`CREATE_TABLES_ON_STARTUP=true` creates missing tables on boot but **never alters existing ones**. When deploying to an existing database, run the relevant `ALTER TABLE` statements first.
+
+| Commit | Change | Migration SQL |
+|--------|--------|---------------|
+| `8355a9f` | Added `created_by_user_id` column to `organizer_table` | `ALTER TABLE organizer_table ADD COLUMN IF NOT EXISTS created_by_user_id BIGINT;` |
+
+For future changes: add a row here whenever a new column is added to a model, so deployments don't miss it.
 

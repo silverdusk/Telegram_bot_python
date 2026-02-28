@@ -42,9 +42,12 @@ export DATABASE__PORT=5432
 export DATABASE__TABLE_NAME=organizer_table
 export WEBHOOK_URL=https://your-domain.com/webhook/telegram
 export WEBHOOK_SECRET_TOKEN=random_secret_string
+export ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
 docker compose up -d
 ```
+
+> **Important:** `ENCRYPTION_KEY` is required. The app will refuse to start if it is missing. Generate it once and store it securely — changing or losing the key makes all previously encrypted data in the database unreadable.
 
 App: `http://localhost:8000`  
 Health: `http://localhost:8000/webhook/health`
@@ -148,11 +151,12 @@ sudo systemctl status telegram-bot
 
 - [ ] `DEBUG=false` (or unset)
 - [ ] Strong `DATABASE__PASSWORD` and `WEBHOOK_SECRET_TOKEN`
+- [ ] `ENCRYPTION_KEY` set and backed up securely (Fernet key — see section 2)
 - [ ] `WEBHOOK_URL` and webhook set in Telegram (HTTPS only)
 - [ ] Reverse proxy with valid TLS certificate
-- [ ] CORS: if needed, restrict `allow_origins` in `app/main.py`
+- [ ] CORS: if needed, restrict `CORS_ORIGINS` in `.env`
 - [ ] Logs: ensure `logs/` is writable or use stdout (Docker logs)
-- [ ] DB: backups and schema (use `CREATE_TABLES_ON_STARTUP=false` if you run migrations separately)
+- [ ] DB: backups and schema migrations applied before deploying new image (see section 9)
 
 ## 7. Health and monitoring
 
@@ -162,6 +166,36 @@ sudo systemctl status telegram-bot
 
 ## 8. Troubleshooting
 
-- **Webhook not receiving updates**: Check HTTPS, URL path `/webhook/telegram`, and firewall. Test with `curl -X POST https://your-domain.com/webhook/telegram -H "Content-Type: application/json" -d '{}'` (should return JSON, not connection error).
-- **DB connection errors**: Verify `DATABASE__HOST`, `DATABASE__PORT`, credentials, and that PostgreSQL allows connections from the app host.
+- **502 Bad Gateway from nginx**: The app is not running or crashed on startup. Check `docker logs <container>` — startup failures are logged as `CRITICAL` before the process exits.
+- **App exits immediately with no logs**: All logs go to `logs/log.log` inside the container by default. Run the container with a shell to read the file: `docker run --rm --env-file .env <image> sh -c "python -m uvicorn app.main:app || cat logs/log.log"`.
+- **`ENCRYPTION_KEY` missing / `Field required` error**: Generate a Fernet key and add it to `.env`:
+  ```bash
+  python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  # Add the output as: ENCRYPTION_KEY=<value>
+  ```
+- **`UndefinedColumnError` / `column does not exist` on startup**: The database table is missing a column added in a recent model change. Run the required `ALTER TABLE` migration before redeploying (see section 9).
+- **Webhook not receiving updates**: Check HTTPS, URL path `/webhook/telegram`, and firewall. Test with `curl -X POST https://your-domain.com/webhook/telegram -H "Content-Type: application/json" -d '{}'` (should return JSON, not a connection error).
+- **DB connection errors**: Verify `DATABASE__HOST`, `DATABASE__PORT`, credentials, and that PostgreSQL allows connections from the app host. When running in Docker, `DATABASE__HOST` must be the container name (e.g. `db`), not `localhost`.
 - **403 on webhook**: Ensure `X-Telegram-Bot-Api-Secret-Token` matches `WEBHOOK_SECRET_TOKEN` (or leave secret token empty for no verification).
+
+## 9. Database schema migrations
+
+`CREATE_TABLES_ON_STARTUP=true` (default) creates **new** tables automatically but **never modifies existing ones**. When a model gains a new column, you must apply the change manually before deploying the new image:
+
+```bash
+# Example: adding created_by_user_id column (added in commit 8355a9f)
+docker exec bot-db-1 psql -U <DB_USER> -d <DB_NAME> -c \
+  "ALTER TABLE organizer_table ADD COLUMN IF NOT EXISTS created_by_user_id BIGINT;"
+```
+
+General pattern for any new nullable column:
+```sql
+ALTER TABLE <table_name> ADD COLUMN IF NOT EXISTS <column_name> <type>;
+```
+
+**Migration checklist when deploying a new image:**
+1. Check git log for model changes (`database/models.py`).
+2. For each new column, run the corresponding `ALTER TABLE` on the live DB.
+3. Deploy the new image (`docker compose up -d --build app`).
+
+For a fully automated approach, consider adopting **Alembic** (see `MIGRATION_GUIDE.md`).
