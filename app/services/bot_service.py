@@ -1,5 +1,6 @@
 """Telegram bot service for handling bot logic."""
 import logging
+import os
 from typing import Optional
 from telegram import Update, Bot, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from telegram.ext import ContextTypes
@@ -16,6 +17,12 @@ from app.core.config import get_settings
 from app.core.permissions import get_user_role, is_admin_role, can_manage_item
 
 logger = logging.getLogger(__name__)
+
+_NO_ACCESS_IMAGE = os.path.join(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")),
+    "assets",
+    "no_access.png",
+)
 
 
 def clear_flow_state(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -34,6 +41,15 @@ class BotService:
         """Initialize bot service."""
         self.bot = bot
         self.settings = get_settings()
+
+    async def _send_no_access(self, chat_id: int, text: str = "You are not authorized to use this command.") -> None:
+        """Send no-access image with caption. Falls back to plain text if image is missing."""
+        try:
+            with open(_NO_ACCESS_IMAGE, "rb") as photo:
+                await self.bot.send_photo(chat_id=chat_id, photo=photo, caption=text)
+        except FileNotFoundError:
+            logger.warning("No-access image not found at %s, sending text only", _NO_ACCESS_IMAGE)
+            await self.bot.send_message(chat_id=chat_id, text=text)
 
     async def send_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send welcome message with keyboard. Ensures user exists in DB (role user) if not fallback admin."""
@@ -656,7 +672,7 @@ class BotService:
                 user_id = update.effective_user.id if update.effective_user else None
                 role = await get_user_role(user_id, session, self.settings)
                 if not can_manage_item(item.created_by_user_id, user_id, role):
-                    await update.message.reply_text("You are not authorized to update this item.")
+                    await self._send_no_access(update.message.chat_id, "You are not authorized to update this item.")
                     context.user_data.pop('state', None)
                     context.user_data.pop('update_data', None)
                     return
@@ -804,7 +820,7 @@ class BotService:
                 user_id = context.user_data.get('update_user_id')
                 role = await get_user_role(user_id, session, self.settings)
                 if not can_manage_item(item_to_check.created_by_user_id, user_id, role):
-                    await self.bot.send_message(chat_id, "You are not authorized to update this item.")
+                    await self._send_no_access(chat_id, "You are not authorized to update this item.")
                     return
                 payload = ItemUpdate(**update_data)
                 updated = await repository.update_item(update_item_id, payload)
@@ -1089,7 +1105,7 @@ class BotService:
         user_id = update.effective_user.id if update.effective_user else None
         role = await get_user_role(user_id, session, self.settings)
         if not is_admin_role(role):
-            await msg.reply_text("You are not authorized to use this command.")
+            await self._send_no_access(msg.chat_id, "You are not authorized to use this command.")
             logger.warning("Unauthorized test message attempt user_id=%s", user_id)
             return
 
@@ -1134,7 +1150,7 @@ class BotService:
         session = context.bot_data.get("current_db_session") if context.bot_data else None
         role = await get_user_role(user_id, session, self.settings)
         if not is_admin_role(role):
-            await msg.reply_text("You are not authorized to use this command.")
+            await self._send_no_access(msg.chat_id, "You are not authorized to use this command.")
             logger.warning("Unauthorized admin menu attempt user_id=%s", user_id)
             return
 
@@ -1154,7 +1170,7 @@ class BotService:
         session = context.bot_data.get("current_db_session") if context.bot_data else None
         role = await get_user_role(user_id, session, self.settings)
         if not is_admin_role(role):
-            await msg.reply_text("You are not authorized to use this command.")
+            await self._send_no_access(msg.chat_id, "You are not authorized to use this command.")
             return None, None, None
         if session is None:
             await msg.reply_text("Database session not available. Please try again.")
@@ -1408,7 +1424,7 @@ class BotService:
         session = context.bot_data.get("current_db_session") if context.bot_data else None
         role = await get_user_role(user_id, session, self.settings)
         if not is_admin_role(role):
-            await msg.reply_text("You are not authorized to use this command.")
+            await self._send_no_access(msg.chat_id, "You are not authorized to use this command.")
             logger.warning("Unauthorized stop attempt user_id=%s", user_id)
             return
 

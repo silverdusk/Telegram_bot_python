@@ -17,6 +17,7 @@ RUN poetry config virtualenvs.create false \
 # Application code
 COPY app ./app
 COPY database ./database
+COPY assets ./assets
 COPY run.py ./
 COPY logging.ini ./
 
