@@ -1,5 +1,6 @@
 """Application configuration using Pydantic Settings."""
 import json
+import secrets
 from typing import List, Union
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -106,6 +107,14 @@ class Settings(BaseSettings):
     cors_origins: List[str] = Field(
         default_factory=lambda: ["*"],
         description="CORS allow_origins (use ['*'] for all, or list of origins for production)",
+    )
+
+    # Web admin panel
+    web_admin_user: str = Field(default="admin", description="Web admin panel username (WEB_ADMIN_USER)")
+    web_admin_password: str = Field(default="", description="Web admin panel password (WEB_ADMIN_PASSWORD)")
+    web_admin_jwt_secret: str = Field(
+        default_factory=lambda: secrets.token_hex(32),
+        description="JWT cookie secret for admin panel (WEB_ADMIN_JWT_SECRET; random per-restart if not set)",
     )
 
     @field_validator("cors_origins", mode="before")

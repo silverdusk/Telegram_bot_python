@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin{% endblock %} — Bot Admin</title>
+    <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+{% block navbar %}
+<nav class="navbar">
+    <a class="brand" href="/admin">Bot Admin</a>
+    <a href="/admin" {% if active == 'dashboard' %}class="active"{% endif %}>Dashboard</a>
+    <a href="/admin/users" {% if active == 'users' %}class="active"{% endif %}>Users</a>
+    <a href="/admin/items" {% if active == 'items' %}class="active"{% endif %}>Items</a>
+    <a href="/admin/settings" {% if active == 'settings' %}class="active"{% endif %}>Settings</a>
+    <form method="POST" action="/admin/logout" style="margin-left:auto">
+        <button type="submit" class="btn btn-sm logout" style="background:none;border:none;cursor:pointer;color:#e05c6a;font-size:13px;padding:6px 12px">Logout</button>
+    </form>
+</nav>
+{% endblock %}
+
+<div class="page">
+    {% set flash_msg = request.query_params.get('msg') %}
+    {% set flash_type = request.query_params.get('type', 'success') %}
+    {% if flash_msg %}
+    <div class="flash flash-{{ flash_type }}">{{ flash_msg }}</div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>

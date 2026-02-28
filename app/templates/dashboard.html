@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="value">{{ total_users }}</div>
+        <div class="label">Total Users</div>
+    </div>
+    <div class="stat-card">
+        <div class="value">{{ total_items }}</div>
+        <div class="label">Total Items</div>
+    </div>
+    <div class="stat-card">
+        <div class="value">{{ available_items }}</div>
+        <div class="label">Available Items</div>
+    </div>
+</div>
+<div class="card" style="display:flex;gap:12px;flex-wrap:wrap">
+    <a href="/admin/users" class="btn btn-primary">Manage Users</a>
+    <a href="/admin/items" class="btn btn-secondary">Browse Items</a>
+    <a href="/admin/settings" class="btn btn-secondary">Bot Settings</a>
+</div>
+{% endblock %}

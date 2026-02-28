@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Items{% endblock %}
+{% block content %}
+<h1>Items</h1>
+
+<div class="card">
+    <form method="GET" action="/admin/items">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="search">Search name</label>
+                <input type="text" id="search" name="search" value="{{ search }}" placeholder="item name…" style="width:200px">
+            </div>
+            <div class="form-group">
+                <label for="avail">Availability</label>
+                <select id="avail" name="avail">
+                    <option value="all" {% if avail == 'all' %}selected{% endif %}>All</option>
+                    <option value="yes" {% if avail == 'yes' %}selected{% endif %}>Available</option>
+                    <option value="no"  {% if avail == 'no'  %}selected{% endif %}>Unavailable</option>
+                </select>
+            </div>
+            <div class="form-group" style="justify-content:flex-end">
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+            {% if search or avail != 'all' %}
+            <div class="form-group" style="justify-content:flex-end">
+                <a href="/admin/items" class="btn btn-secondary">Clear</a>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>
+        Items
+        <span style="font-weight:400;color:#6c757d;font-size:13px">
+            {{ (page - 1) * per_page + 1 }}–{{ [(page * per_page), total] | min }} of {{ total }}
+        </span>
+    </h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Price</th>
+                    <th>Available</th>
+                    <th>Created At</th>
+                    <th>Chat ID</th>
+                    <th>Creator</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.id }}</td>
+                <td>{{ item.item_name }}</td>
+                <td>{{ item.item_type }}</td>
+                <td>{{ item.item_amount }}</td>
+                <td>{{ '%.2f' % item.item_price if item.item_price is not none else '—' }}</td>
+                <td>
+                    <span class="badge {{ 'badge-yes' if item.availability else 'badge-no' }}">
+                        {{ 'Yes' if item.availability else 'No' }}
+                    </span>
+                </td>
+                <td>{{ item.timestamp.strftime('%Y-%m-%d %H:%M') if item.timestamp else '—' }}</td>
+                <td>{{ item.chat_id }}</td>
+                <td>{{ item.created_by_user_id if item.created_by_user_id else '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" style="color:#6c757d;text-align:center">No items found.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        {% set base = '/admin/items?page=' %}
+        {% set qs = ('&search=' ~ search if search else '') ~ ('&avail=' ~ avail if avail != 'all' else '') %}
+        {% if page > 1 %}
+        <a href="{{ base }}{{ page - 1 }}{{ qs }}" class="btn btn-sm btn-secondary">← Prev</a>
+        {% else %}
+        <button class="btn btn-sm btn-secondary" disabled>← Prev</button>
+        {% endif %}
+        <span>Page {{ page }} / {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="{{ base }}{{ page + 1 }}{{ qs }}" class="btn btn-sm btn-secondary">Next →</a>
+        {% else %}
+        <button class="btn btn-sm btn-secondary" disabled>Next →</button>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

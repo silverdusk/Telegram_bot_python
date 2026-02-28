@@ -5,10 +5,12 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.core.config import get_settings
 from app.database.session import init_db, close_db, create_tables, seed_roles, ensure_indexes
 from app.api.v1 import webhook
 from app.api.v1.webhook import get_bot_application
+from app.api.v1.admin import admin_router, AdminAuthMiddleware
 
 # Configure logging: use logging.ini if present, else basicConfig (e.g. in Docker)
 _ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -81,9 +83,15 @@ def create_application() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+    app.add_middleware(AdminAuthMiddleware)
+
+    # Static files
+    _static_dir = os.path.join(os.path.dirname(__file__), "static")
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
     # Include routers
     app.include_router(webhook.router)
+    app.include_router(admin_router)
     
     @app.get("/")
     async def root():
