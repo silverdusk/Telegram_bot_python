@@ -7,7 +7,7 @@ WORKDIR /app
 ENV POETRY_VERSION=1.7.1
 ENV POETRY_HOME=/opt/poetry
 ENV PATH="$POETRY_HOME/bin:$PATH"
-RUN pip install --no-cache-dir poetry
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 # Dependencies first (better layer cache)
 COPY pyproject.toml poetry.lock* ./
