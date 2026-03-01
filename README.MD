@@ -60,6 +60,17 @@ tests/
   test_schemas.py      # ItemCreate, ItemUpdate
   test_admin.py        # Admin panel JWT, middleware, login/logout, dashboard, users CRUD, items, settings
   test_vpn.py          # VPN: _fmt_bytes, VPNClient (auth, all methods, lazy auth, 401 re-auth), get_vpn_client factory, all VPN admin routes
+  playwright/          # Playwright E2E and API tests (require a running app instance)
+    conftest.py        # Shared fixtures: api_request_context, admin_credentials, authenticated_page
+    pages/
+      base_page.py     # BasePage — navigate(), current_url, title
+      login_page.py    # LoginPage — locators for /admin/login
+      dashboard_page.py # DashboardPage — nav links, stat cards, logout
+    smoke/
+      test_smoke.py    # @smoke — app availability, login page load, login flow
+    api/
+      test_health.py   # @regression — /webhook/health, /, /webhook/telegram
+      test_admin.py    # @regression — admin routes, auth, user management endpoints
 ```
 
 ## Requirements
@@ -178,21 +189,56 @@ Roles (admin, user) are stored in the database. If a user is not found in the DB
 
 ## Tests
 
-Run all 205 tests:
+### Unit tests
+
+Run all 205 unit tests (no running app required):
 
 ```bash
-poetry run pytest          # legacy test_bot.py and test_database.py are excluded automatically
+poetry run pytest          # legacy test_bot.py, test_database.py, and tests/playwright/ are excluded automatically
 poetry run pytest -v       # verbose output
 ```
 
-Or target specific suites:
+`test_bot.py` and `test_database.py` import removed legacy classes and are excluded via `pyproject.toml`.
+Encryption tests (`test_encryption.py`) are skipped if `cryptography` is not installed.
+
+### Playwright E2E and API tests
+
+These tests run against a **live app instance** (local or remote).
+
+**One-time setup** (install browsers after `poetry install`):
 
 ```bash
-poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_encryption.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_app_user_repository.py tests/test_schemas.py tests/test_admin.py tests/test_vpn.py -v
+poetry install --with playwright
+poetry run playwright install chromium
 ```
 
-`test_bot.py` and `test_database.py` import removed legacy classes and are excluded via `pyproject.toml` (`addopts = "--ignore=..."`).
-Encryption tests (`test_encryption.py`) are skipped if the `cryptography` package is not installed; add `cryptography` to your environment to run them.
+**Run smoke tests** (fast sanity checks — health endpoint, login page, auth flow):
+
+```bash
+poetry run pytest tests/playwright/ -m smoke -v
+```
+
+**Run regression tests** (full API coverage — all admin routes, input validation, auth):
+
+```bash
+poetry run pytest tests/playwright/ -m regression -v
+```
+
+**See the browser** (add `--headed` to any Playwright run):
+
+```bash
+poetry run pytest tests/playwright/ -m smoke -v --headed
+```
+
+**Override the target URL or credentials:**
+
+```bash
+# Different environment
+poetry run pytest tests/playwright/ --base-url https://staging.example.com -v
+
+# Custom admin credentials
+WEB_ADMIN_USER=myadmin WEB_ADMIN_PASSWORD=secret poetry run pytest tests/playwright/ -v
+```
 
 ## Logging
 
