@@ -58,7 +58,7 @@ docker compose up -d
 
 App: `http://localhost:8000`
 Health: `http://localhost:8000/webhook/health`
-Swagger UI: `http://localhost:8000/docs`
+Swagger UI: `http://localhost:8000/docs` (only when `DEBUG=true`)
 Admin: `https://your-domain.com/admin`
 
 ### Run app only (external database)
@@ -202,7 +202,7 @@ sudo systemctl status telegram-bot
 ## 8. Health and monitoring
 
 - **Liveness**: `GET /webhook/health` → `200` and `{"status":"ok"}`
-- **API docs**: `GET /docs` — Swagger UI; `GET /redoc` — ReDoc (development only; consider restricting in production).
+- **API docs**: `GET /docs` — Swagger UI; `GET /redoc` — ReDoc. Only served when `DEBUG=true`; disabled automatically in production.
 - Docker HEALTHCHECK and systemd `Restart=always` use this endpoint.
 - Optionally add Prometheus/metrics later.
 

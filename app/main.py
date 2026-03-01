@@ -97,8 +97,8 @@ def create_application() -> FastAPI:
         version="0.1.0",
         debug=settings.debug,
         lifespan=lifespan,
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url="/docs" if settings.debug else None,
+        redoc_url="/redoc" if settings.debug else None,
         openapi_tags=_OPENAPI_TAGS,
     )
     

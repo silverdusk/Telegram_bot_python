@@ -128,8 +128,8 @@ docker compose -f docker-compose.app-only.yml up -d
 
 - App: `http://localhost:8000`
 - Health: `http://localhost:8000/webhook/health`
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Swagger UI: `http://localhost:8000/docs` (only when `DEBUG=true`)
+- ReDoc: `http://localhost:8000/redoc` (only when `DEBUG=true`)
 - Admin panel: `https://your-domain.com/admin` (requires HTTPS and `WEB_ADMIN_PASSWORD` in `.env`)
 
 ### Webhook
@@ -255,5 +255,5 @@ For a more detailed PostgreSQL and pgAdmin setup, see the previous version of th
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** – Docker, webhook, HTTPS, checklist.
 - **[docs/DEPLOY_MANUAL.md](docs/DEPLOY_MANUAL.md)** – Manual server deployment.
 - **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** – Moving from Telebot to FastAPI/webhook.
-- **`/docs`** – Interactive Swagger UI (served by the running app).
-- **`/redoc`** – ReDoc API reference (served by the running app).
+- **`/docs`** – Interactive Swagger UI (available only when `DEBUG=true`).
+- **`/redoc`** – ReDoc API reference (available only when `DEBUG=true`).
