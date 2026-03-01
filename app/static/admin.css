@@ -215,7 +215,7 @@ textarea { resize: vertical; min-height: 80px; }
 
 /* ── Flying Jesus ── */
 @keyframes jesus-fly {
-    from { transform: translate(0, 0) rotate(25deg); }
+    from { transform: translate(0, 0) rotate(10deg); }
     to   { transform: translate(calc(100vw + 400px), calc(-100vh - 400px)) rotate(30deg); }
 }
 #jesus-fly {
