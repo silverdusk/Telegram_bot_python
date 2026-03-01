@@ -1,13 +1,23 @@
 """Webhook router for Telegram bot."""
 import logging
-from typing import Dict, Any
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import Application
 from app.core.dependencies import get_db
 from app.core.config import get_settings
 from app.services.bot_service import BotService
+
+
+class WebhookResponse(BaseModel):
+    ok: bool
+    error: Optional[str] = None
+
+
+class HealthResponse(BaseModel):
+    status: str
 
 logger = logging.getLogger(__name__)
 
@@ -54,23 +64,27 @@ async def get_bot_application() -> tuple[Application, BotService]:
     return bot_application, bot_service
 
 
-@router.post("/telegram")
+@router.post(
+    "/telegram",
+    response_model=WebhookResponse,
+    summary="Receive Telegram update",
+    description=(
+        "Called by Telegram for every bot update (message, callback query, etc.). "
+        "Pass `X-Telegram-Bot-Api-Secret-Token` if `WEBHOOK_SECRET_TOKEN` is configured."
+    ),
+    responses={
+        403: {"description": "Invalid or missing secret token"},
+        500: {"description": "Internal processing error"},
+    },
+)
 async def telegram_webhook(
     request: Request,
-    x_telegram_bot_api_secret_token: str | None = Header(None),
+    x_telegram_bot_api_secret_token: str | None = Header(
+        None,
+        description="Secret token set when registering the webhook with Telegram",
+    ),
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Handle Telegram webhook updates.
-    
-    Args:
-        request: FastAPI request object
-        x_telegram_bot_api_secret_token: Secret token for webhook verification
-        db: Database session
-    
-    Returns:
-        Response dict
-    """
+) -> WebhookResponse:
     settings = get_settings()
     
     # Verify secret token if configured
@@ -89,7 +103,7 @@ async def telegram_webhook(
 
         if update is None:
             logger.warning("Received invalid update (parse failed)")
-            return {"ok": False, "error": "Invalid update"}
+            return WebhookResponse(ok=False, error="Invalid update")
 
         kind = _update_kind(update)
         logger.info("Processing update update_id=%s kind=%s", update.update_id, kind)
@@ -100,7 +114,7 @@ async def telegram_webhook(
         app.bot_data.pop('current_db_session', None)
 
         logger.info("Processed update update_id=%s", update.update_id)
-        return {"ok": True}
+        return WebhookResponse(ok=True)
 
     except Exception as e:
         # Log type and message only; do not log request body or update content
@@ -108,8 +122,13 @@ async def telegram_webhook(
         raise HTTPException(status_code=500, detail="Internal error")
 
 
-@router.get("/health")
-async def health_check() -> Dict[str, str]:
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    summary="Health check",
+    description="Returns `{\"status\": \"ok\"}` when the service is running.",
+)
+async def health_check() -> HealthResponse:
     """Health check endpoint."""
-    return {"status": "ok"}
+    return HealthResponse(status="ok")
 

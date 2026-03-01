@@ -129,6 +129,8 @@ curl http://127.0.0.1:8000/webhook/health
 
 You should see JSON responses.
 
+Swagger UI and ReDoc are available at `http://127.0.0.1:8000/docs` and `http://127.0.0.1:8000/redoc` (development only).
+
 After setting up HTTPS (Step 6), the web admin panel is available at `https://your-domain.com/admin`.
 
 ### Step 6: Expose the app (for webhook)
@@ -442,5 +444,6 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 5. Set Telegram webhook to `https://your-domain.com/webhook/telegram`.
 6. Check health: `curl https://your-domain.com/webhook/health`.
 7. Access admin panel: `https://your-domain.com/admin` (requires `WEB_ADMIN_PASSWORD` in `.env`).
+8. Browse API docs locally: `http://127.0.0.1:8000/docs` (Swagger UI) or `http://127.0.0.1:8000/redoc`.
 
 After that, the bot runs on the server and receives updates via the webhook.

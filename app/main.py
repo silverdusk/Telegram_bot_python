@@ -63,16 +63,43 @@ async def lifespan(app: FastAPI):
     logger.info("Application shut down")
 
 
+_OPENAPI_TAGS = [
+    {
+        "name": "webhook",
+        "description": "Telegram webhook receiver and health check.",
+    },
+]
+
+_DESCRIPTION = """
+Telegram Bot API — item management bot built with **FastAPI** and **python-telegram-bot** (webhook mode).
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/webhook/telegram` | Receive Telegram updates |
+| `GET`  | `/webhook/health`   | Health check |
+| `GET`  | `/`                 | Root / status |
+
+## Notes
+- The **web admin panel** (`/admin`) is a browser UI and is intentionally excluded from this spec.
+- Authentication for `/webhook/telegram` is via the `X-Telegram-Bot-Api-Secret-Token` header (if configured).
+"""
+
+
 def create_application() -> FastAPI:
     """Create and configure FastAPI application."""
     settings = get_settings()
-    
+
     app = FastAPI(
         title=settings.app_name,
-        description="Telegram Bot API with FastAPI",
+        description=_DESCRIPTION,
         version="0.1.0",
         debug=settings.debug,
         lifespan=lifespan,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_tags=_OPENAPI_TAGS,
     )
     
     # CORS middleware (use CORS_ORIGINS env in production to restrict)
@@ -91,7 +118,8 @@ def create_application() -> FastAPI:
 
     # Include routers
     app.include_router(webhook.router)
-    app.include_router(admin_router)
+    # Admin panel routes are HTML-based; exclude from OpenAPI/Swagger docs
+    app.include_router(admin_router, include_in_schema=False)
     
     @app.get("/")
     async def root():
