@@ -47,6 +47,9 @@ export ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; prin
 export WEB_ADMIN_USER=admin
 export WEB_ADMIN_PASSWORD=your_strong_admin_password
 export WEB_ADMIN_JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+# VPN management (optional — leave empty to disable the VPN tab)
+export VPN_API_URL=http://localhost:51821
+export VPN_API_PASSWORD=your_wg_easy_password
 
 docker compose up -d
 ```
@@ -106,6 +109,7 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 - **Users** — list, add, change role (admin/user), delete
 - **Items** — paginated table with name search and availability filter
 - **Settings** — edit `allowed_types`, string length limits, `max_item_amount`, `max_item_price`, `skip_working_hours`; changes are persisted to `config.json` (if present) or `.env`
+- **VPN** — manage amnezia-wg-easy clients: list with traffic stats and last-handshake, create/delete, enable/disable, download `.conf` file and view QR code. Requires `VPN_API_URL` and `VPN_API_PASSWORD` in `.env`; tab shows a "not configured" notice if either is missing
 
 > Session cookies are `httponly` and `secure` (8-hour expiry). The panel relies on the app being served over HTTPS.
 
@@ -192,6 +196,7 @@ sudo systemctl status telegram-bot
 - [ ] DB: backups and schema migrations applied before deploying new image (see section 9)
 - [ ] `WEB_ADMIN_PASSWORD` set to a strong value (panel is effectively disabled if left empty)
 - [ ] `WEB_ADMIN_JWT_SECRET` set to a fixed value so admin sessions survive app restarts
+- [ ] `VPN_API_URL` and `VPN_API_PASSWORD` set if VPN management tab is needed (optional)
 
 ## 8. Health and monitoring
 

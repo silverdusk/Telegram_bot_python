@@ -117,6 +117,10 @@ class Settings(BaseSettings):
         description="JWT cookie secret for admin panel (WEB_ADMIN_JWT_SECRET; random per-restart if not set)",
     )
 
+    # VPN server (amnezia-wg-easy)
+    vpn_api_url: str = Field(default="", description="Base URL of wg-easy API, e.g. http://localhost:51821")
+    vpn_api_password: str = Field(default="", description="wg-easy web UI password")
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: Union[List[str], str]) -> List[str]:

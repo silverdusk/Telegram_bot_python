@@ -14,6 +14,7 @@
     <a href="/admin/users" {% if active == 'users' %}class="active"{% endif %}>Users</a>
     <a href="/admin/items" {% if active == 'items' %}class="active"{% endif %}>Items</a>
     <a href="/admin/settings" {% if active == 'settings' %}class="active"{% endif %}>Settings</a>
+    <a href="/admin/vpn" {% if active == 'vpn' %}class="active"{% endif %}>VPN</a>
     <form method="POST" action="/admin/logout" style="margin-left:auto">
         <button type="submit" class="btn btn-sm logout" style="background:none;border:none;cursor:pointer;color:#e05c6a;font-size:13px;padding:6px 12px">Logout</button>
     </form>
@@ -29,7 +30,7 @@
 
     {% block content %}{% endblock %}
 </div>
-<img id="jesus-fly" src="/static/jesus.png" alt="">
+<img id="jesus-fly" src="/static/flying_img.png" alt="">
 <script>
 (function () {
     if (new URLSearchParams(window.location.search).get('welcome') === '1') {

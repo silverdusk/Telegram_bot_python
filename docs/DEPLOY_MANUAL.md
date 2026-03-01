@@ -93,6 +93,15 @@ WEB_ADMIN_JWT_SECRET=your_random_hex_secret
 
 > If `WEB_ADMIN_PASSWORD` is left empty, the admin login will always fail (panel is effectively disabled).
 
+For the VPN management tab (optional):
+
+```env
+VPN_API_URL=http://localhost:51821
+VPN_API_PASSWORD=your_wg_easy_password
+```
+
+> Leave `VPN_API_URL` and `VPN_API_PASSWORD` empty (or omit them) to hide the VPN tab.
+
 Save and exit.
 
 ### Step 4: Build and run with Docker Compose
@@ -408,6 +417,8 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 | `WEB_ADMIN_USER` | No | `admin` (default) |
 | `WEB_ADMIN_PASSWORD` | For admin panel | Strong password — panel disabled if empty |
 | `WEB_ADMIN_JWT_SECRET` | Recommended | 64-char hex string (`secrets.token_hex(32)`) |
+| `VPN_API_URL` | For VPN tab | `http://localhost:51821` — VPN tab hidden if empty |
+| `VPN_API_PASSWORD` | For VPN tab | wg-easy web UI password |
 
 ---
 

@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 import jwt
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -388,6 +388,157 @@ def _save_to_json(path: str, new_values: dict) -> None:
     data["skip_working_hours"] = str(new_values["skip_working_hours"])
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+
+
+def _fmt_bytes(n: int | None) -> str:
+    """Format byte count as human-readable string."""
+    if n is None:
+        return "—"
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024:
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
+        n /= 1024
+    return f"{n:.1f} PB"
+
+
+# ── VPN (amnezia-wg-easy) ──────────────────────────────────────────────────────
+
+@admin_router.get("/vpn", response_class=HTMLResponse)
+async def vpn_page(request: Request):
+    from app.services.vpn_client import get_vpn_client, VPNAPIError
+
+    vpn = get_vpn_client()
+    if vpn is None:
+        return templates.TemplateResponse(
+            request, "vpn.html",
+            {"active": "vpn", "clients": None, "error": "VPN not configured (vpn_api_url / vpn_api_password missing)."},
+        )
+    try:
+        clients = await vpn.list_clients()
+    except Exception as e:
+        logger.error("VPN list_clients error: %s", e)
+        return templates.TemplateResponse(
+            request, "vpn.html",
+            {"active": "vpn", "clients": None, "error": f"Could not reach VPN API: {e}"},
+        )
+
+    for c in clients:
+        c["_dl"] = _fmt_bytes(c.get("transferRx") or c.get("downloadBytes"))
+        c["_ul"] = _fmt_bytes(c.get("transferTx") or c.get("uploadBytes"))
+        ts = c.get("latestHandshakeAt")
+        c["_handshake"] = ts[:19].replace("T", " ") if ts else "—"
+
+    enabled = sum(1 for c in clients if c.get("enabled"))
+    return templates.TemplateResponse(
+        request, "vpn.html",
+        {
+            "active": "vpn",
+            "clients": clients,
+            "total": len(clients),
+            "enabled": enabled,
+            "disabled": len(clients) - enabled,
+            "error": None,
+        },
+    )
+
+
+@admin_router.post("/vpn/clients")
+async def vpn_create_client(request: Request):
+    from app.services.vpn_client import get_vpn_client
+
+    form = await request.form()
+    name = str(form.get("name", "")).strip()
+    if not name:
+        return _redirect("/admin/vpn", "Client name cannot be empty.", "error")
+
+    vpn = get_vpn_client()
+    if vpn is None:
+        return _redirect("/admin/vpn", "VPN not configured.", "error")
+    try:
+        await vpn.create_client(name)
+    except Exception as e:
+        logger.error("VPN create_client error: %s", e)
+        return _redirect("/admin/vpn", f"Failed to create client: {e}", "error")
+    return _redirect("/admin/vpn", f"Client '{name}' created.")
+
+
+@admin_router.post("/vpn/clients/{client_id}/delete")
+async def vpn_delete_client(request: Request, client_id: str):
+    from app.services.vpn_client import get_vpn_client
+
+    vpn = get_vpn_client()
+    if vpn is None:
+        return _redirect("/admin/vpn", "VPN not configured.", "error")
+    try:
+        await vpn.delete_client(client_id)
+    except Exception as e:
+        logger.error("VPN delete_client error: %s", e)
+        return _redirect("/admin/vpn", f"Failed to delete client: {e}", "error")
+    return _redirect("/admin/vpn", "Client deleted.")
+
+
+@admin_router.post("/vpn/clients/{client_id}/enable")
+async def vpn_enable_client(request: Request, client_id: str):
+    from app.services.vpn_client import get_vpn_client
+
+    vpn = get_vpn_client()
+    if vpn is None:
+        return _redirect("/admin/vpn", "VPN not configured.", "error")
+    try:
+        await vpn.enable_client(client_id)
+    except Exception as e:
+        logger.error("VPN enable_client error: %s", e)
+        return _redirect("/admin/vpn", f"Failed to enable client: {e}", "error")
+    return _redirect("/admin/vpn", "Client enabled.")
+
+
+@admin_router.post("/vpn/clients/{client_id}/disable")
+async def vpn_disable_client(request: Request, client_id: str):
+    from app.services.vpn_client import get_vpn_client
+
+    vpn = get_vpn_client()
+    if vpn is None:
+        return _redirect("/admin/vpn", "VPN not configured.", "error")
+    try:
+        await vpn.disable_client(client_id)
+    except Exception as e:
+        logger.error("VPN disable_client error: %s", e)
+        return _redirect("/admin/vpn", f"Failed to disable client: {e}", "error")
+    return _redirect("/admin/vpn", "Client disabled.")
+
+
+@admin_router.get("/vpn/clients/{client_id}/qrcode")
+async def vpn_qrcode(request: Request, client_id: str):
+    from app.services.vpn_client import get_vpn_client
+
+    vpn = get_vpn_client()
+    if vpn is None:
+        return Response("VPN not configured", status_code=503)
+    try:
+        data = await vpn.get_qrcode(client_id)
+    except Exception as e:
+        logger.error("VPN get_qrcode error: %s", e)
+        return Response(f"Error: {e}", status_code=502)
+    return Response(content=data, media_type="image/svg+xml")
+
+
+@admin_router.get("/vpn/clients/{client_id}/config")
+async def vpn_config_download(request: Request, client_id: str):
+    from app.services.vpn_client import get_vpn_client
+
+    vpn = get_vpn_client()
+    if vpn is None:
+        return Response("VPN not configured", status_code=503)
+    try:
+        data = await vpn.get_config(client_id)
+    except Exception as e:
+        logger.error("VPN get_config error: %s", e)
+        return Response(f"Error: {e}", status_code=502)
+    return Response(
+        content=data,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{client_id}.conf"'},
+    )
 
 
 def _save_to_env(path: str, new_values: dict) -> None:

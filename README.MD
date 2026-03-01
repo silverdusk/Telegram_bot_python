@@ -12,7 +12,7 @@ A Telegram bot for item management: add, list, update, and remove items; change 
 - **Menus**: Reply keyboard after `/start`; compact inline menu via `/menu` (Get, Add, Remove item, Update item, Admin, Change availability, Send test message, Stop).
 - **Validation**: Length and character rules for names; amount/price range checks; working-hours check for Add (configurable).
 - **Authorization and roles**: Roles (admin, user) are stored in the database; user data encryption is mandatory (Fernet key in config). A **fallback admin** list (e.g. `AUTHORIZED_IDS` or `FALLBACK_ADMIN_IDS`) is used when a user is not in the DB or the DB is unavailable, so admins retain access. **Admin**: Stop, Admin menu, Send test message, manage all items, and manage users (list, add, set role, remove). **User**: Can update or delete only items they created.
-- **Web admin panel**: Browser-based UI at `/admin` — dashboard (user/item counts), user management (add, change role, delete), paginated item browser with search and availability filter, bot settings editor (persists to `config.json` or `.env`). Protected by username/password login with httponly JWT cookie.
+- **Web admin panel**: Browser-based UI at `/admin` — dashboard (user/item counts), user management (add, change role, delete), paginated item browser with search and availability filter, bot settings editor (persists to `config.json` or `.env`), **VPN management** tab (amnezia-wg-easy: list clients with traffic stats, create/delete clients, enable/disable, download `.conf` and QR code). Protected by username/password login with httponly JWT cookie.
 - **Logging**: Structured logging (no secrets or user content in logs).
 
 ## Project structure
@@ -34,6 +34,7 @@ app/
     repository.py      # Item CRUD (get_item_by_id, update_item, delete_by_name_and_chat, created_by_user_id); UserRepository (list_users, create_user, set_role, delete_user)
   services/
     bot_service.py     # Bot logic: welcome, menu, add/get/update/remove/availability, admin menu, manage users, keyboards
+    vpn_client.py      # Async HTTP client for wg-easy/amnezia-wg-easy API (auth, client CRUD, QR/config proxy)
   schemas/
     item.py            # ItemCreate, ItemResponse, ItemUpdate
   static/
@@ -45,6 +46,7 @@ app/
     users.html         # User management
     items.html         # Paginated item browser
     settings.html      # Bot settings editor
+    vpn.html           # VPN client management
 database/              # Legacy DB layer (optional)
 bot/                   # Legacy Telebot-based bot (optional)
 tests/
@@ -57,6 +59,7 @@ tests/
   test_app_user_repository.py  # get_by_telegram_id, list_users, create_user, set_role, delete_user
   test_schemas.py      # ItemCreate, ItemUpdate
   test_admin.py        # Admin panel JWT, middleware, login/logout, dashboard, users CRUD, items, settings
+  test_vpn.py          # VPN: _fmt_bytes, VPNClient (auth, all methods, lazy auth, 401 re-auth), get_vpn_client factory, all VPN admin routes
 ```
 
 ## Requirements
@@ -162,6 +165,8 @@ Main variables (env or `config.json`):
 | `WEB_ADMIN_USER` | Admin panel login username (default: `admin`) |
 | `WEB_ADMIN_PASSWORD` | Admin panel password — **must be set**; panel login is disabled if empty |
 | `WEB_ADMIN_JWT_SECRET` | JWT cookie secret; set to a fixed value so sessions survive restarts (random per-restart if unset) |
+| `VPN_API_URL` | Base URL of the amnezia-wg-easy API, e.g. `http://localhost:51821` (optional; VPN tab hidden if empty) |
+| `VPN_API_PASSWORD` | Password for the wg-easy web UI (optional) |
 
 See `.env.example` for a full list.
 
@@ -171,7 +176,7 @@ Roles (admin, user) are stored in the database. If a user is not found in the DB
 
 ## Tests
 
-Run all 155 tests:
+Run all 205 tests:
 
 ```bash
 poetry run pytest          # legacy test_bot.py and test_database.py are excluded automatically
@@ -181,7 +186,7 @@ poetry run pytest -v       # verbose output
 Or target specific suites:
 
 ```bash
-poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_encryption.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_app_user_repository.py tests/test_schemas.py tests/test_admin.py -v
+poetry run python -m pytest tests/test_validators.py tests/test_permissions.py tests/test_encryption.py tests/test_app_bot_service.py tests/test_app_repository.py tests/test_app_user_repository.py tests/test_schemas.py tests/test_admin.py tests/test_vpn.py -v
 ```
 
 `test_bot.py` and `test_database.py` import removed legacy classes and are excluded via `pyproject.toml` (`addopts = "--ignore=..."`).
