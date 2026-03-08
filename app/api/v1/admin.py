@@ -390,6 +390,12 @@ def _save_to_json(path: str, new_values: dict) -> None:
         json.dump(data, f, indent=2)
 
 
+def _exc_str(e: Exception) -> str:
+    """Return a non-empty description of an exception (type + message)."""
+    msg = str(e)
+    return f"{type(e).__name__}: {msg}" if msg else type(e).__name__
+
+
 def _fmt_bytes(n: int | None) -> str:
     """Format byte count as human-readable string."""
     if n is None:
@@ -416,10 +422,10 @@ async def vpn_page(request: Request):
     try:
         clients = await vpn.list_clients()
     except Exception as e:
-        logger.error("VPN list_clients error: %s", e)
+        logger.error("VPN list_clients error: %s", e, exc_info=True)
         return templates.TemplateResponse(
             request, "vpn.html",
-            {"active": "vpn", "clients": None, "error": f"Could not reach VPN API: {e}"},
+            {"active": "vpn", "clients": None, "error": f"Could not reach VPN API: {_exc_str(e)}"},
         )
 
     for c in clients:
@@ -457,8 +463,8 @@ async def vpn_create_client(request: Request):
     try:
         await vpn.create_client(name)
     except Exception as e:
-        logger.error("VPN create_client error: %s", e)
-        return _redirect("/admin/vpn", f"Failed to create client: {e}", "error")
+        logger.error("VPN create_client error: %s", e, exc_info=True)
+        return _redirect("/admin/vpn", f"Failed to create client: {_exc_str(e)}", "error")
     return _redirect("/admin/vpn", f"Client '{name}' created.")
 
 
@@ -472,8 +478,8 @@ async def vpn_delete_client(request: Request, client_id: str):
     try:
         await vpn.delete_client(client_id)
     except Exception as e:
-        logger.error("VPN delete_client error: %s", e)
-        return _redirect("/admin/vpn", f"Failed to delete client: {e}", "error")
+        logger.error("VPN delete_client error: %s", e, exc_info=True)
+        return _redirect("/admin/vpn", f"Failed to delete client: {_exc_str(e)}", "error")
     return _redirect("/admin/vpn", "Client deleted.")
 
 
@@ -487,8 +493,8 @@ async def vpn_enable_client(request: Request, client_id: str):
     try:
         await vpn.enable_client(client_id)
     except Exception as e:
-        logger.error("VPN enable_client error: %s", e)
-        return _redirect("/admin/vpn", f"Failed to enable client: {e}", "error")
+        logger.error("VPN enable_client error: %s", e, exc_info=True)
+        return _redirect("/admin/vpn", f"Failed to enable client: {_exc_str(e)}", "error")
     return _redirect("/admin/vpn", "Client enabled.")
 
 
@@ -502,8 +508,8 @@ async def vpn_disable_client(request: Request, client_id: str):
     try:
         await vpn.disable_client(client_id)
     except Exception as e:
-        logger.error("VPN disable_client error: %s", e)
-        return _redirect("/admin/vpn", f"Failed to disable client: {e}", "error")
+        logger.error("VPN disable_client error: %s", e, exc_info=True)
+        return _redirect("/admin/vpn", f"Failed to disable client: {_exc_str(e)}", "error")
     return _redirect("/admin/vpn", "Client disabled.")
 
 
@@ -517,8 +523,8 @@ async def vpn_qrcode(request: Request, client_id: str):
     try:
         data = await vpn.get_qrcode(client_id)
     except Exception as e:
-        logger.error("VPN get_qrcode error: %s", e)
-        return Response(f"Error: {e}", status_code=502)
+        logger.error("VPN get_qrcode error: %s", e, exc_info=True)
+        return Response(_exc_str(e), status_code=502)
     return Response(content=data, media_type="image/svg+xml")
 
 
@@ -532,8 +538,8 @@ async def vpn_config_download(request: Request, client_id: str):
     try:
         data = await vpn.get_config(client_id)
     except Exception as e:
-        logger.error("VPN get_config error: %s", e)
-        return Response(f"Error: {e}", status_code=502)
+        logger.error("VPN get_config error: %s", e, exc_info=True)
+        return Response(_exc_str(e), status_code=502)
     return Response(
         content=data,
         media_type="text/plain",
