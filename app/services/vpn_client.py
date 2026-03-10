@@ -86,7 +86,7 @@ class VPNClient:
         resp.raise_for_status()
 
     async def get_qrcode(self, client_id: str) -> bytes:
-        resp = await self._request("GET", f"/api/wireguard/client/{client_id}/qrcode")
+        resp = await self._request("GET", f"/api/wireguard/client/{client_id}/qrcode.svg")
         resp.raise_for_status()
         return resp.content
 
