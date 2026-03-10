@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "telegram-bot"
-version = "0.1.0"
+version = "0.2.1"
 description = ""
 authors = ["silverdusk <kirill@dr.com>"]
 readme = "README.md"
