@@ -251,7 +251,7 @@ class TestVPNClient:
             timeout=10.0,
         )
 
-    def test_enable_client_sends_put(self):
+    def test_enable_client_sends_post(self):
         vpn = _vpn_with_cookie()
         ctx, inner, _ = _make_ctx(status_code=204)
 
@@ -259,12 +259,12 @@ class TestVPNClient:
             asyncio.run(vpn.enable_client("uuid-1"))
 
         inner.request.assert_called_once_with(
-            "PUT",
+            "POST",
             "http://localhost:51821/api/wireguard/client/uuid-1/enable",
             timeout=10.0,
         )
 
-    def test_disable_client_sends_put(self):
+    def test_disable_client_sends_post(self):
         vpn = _vpn_with_cookie()
         ctx, inner, _ = _make_ctx(status_code=204)
 
@@ -272,7 +272,7 @@ class TestVPNClient:
             asyncio.run(vpn.disable_client("uuid-1"))
 
         inner.request.assert_called_once_with(
-            "PUT",
+            "POST",
             "http://localhost:51821/api/wireguard/client/uuid-1/disable",
             timeout=10.0,
         )

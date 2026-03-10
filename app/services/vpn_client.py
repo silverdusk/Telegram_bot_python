@@ -78,11 +78,11 @@ class VPNClient:
         resp.raise_for_status()
 
     async def enable_client(self, client_id: str) -> None:
-        resp = await self._request("PUT", f"/api/wireguard/client/{client_id}/enable")
+        resp = await self._request("POST", f"/api/wireguard/client/{client_id}/enable")
         resp.raise_for_status()
 
     async def disable_client(self, client_id: str) -> None:
-        resp = await self._request("PUT", f"/api/wireguard/client/{client_id}/disable")
+        resp = await self._request("POST", f"/api/wireguard/client/{client_id}/disable")
         resp.raise_for_status()
 
     async def get_qrcode(self, client_id: str) -> bytes:
