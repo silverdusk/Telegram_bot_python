@@ -81,10 +81,10 @@
                         </form>
                         {% endif %}
 
-                        <a href="/admin/vpn/clients/{{ c.id }}/qrcode"
-                           class="btn btn-sm btn-primary"
-                           target="_blank"
-                           title="View QR code">QR</a>
+                        <button type="button"
+                                class="btn btn-sm btn-primary"
+                                onclick="showQR('{{ c.id }}', '{{ c.name }}')"
+                                title="View QR code">QR</button>
 
                         <a href="/admin/vpn/clients/{{ c.id }}/config"
                            class="btn btn-sm btn-secondary"
@@ -106,4 +106,31 @@
     {% endif %}
 </div>
 {% endif %}
+
+<!-- QR code modal -->
+<div id="qr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:10px;padding:28px 32px;text-align:center;max-width:340px;width:90%;position:relative">
+        <h3 id="qr-title" style="margin:0 0 18px"></h3>
+        <img id="qr-img" src="" alt="QR code" style="max-width:260px;width:100%">
+        <div style="margin-top:18px">
+            <button class="btn btn-secondary" onclick="closeQR()">Close</button>
+        </div>
+    </div>
+</div>
+<script>
+function showQR(id, name) {
+    var modal = document.getElementById('qr-modal');
+    document.getElementById('qr-title').textContent = name;
+    document.getElementById('qr-img').src = '/admin/vpn/clients/' + id + '/qrcode';
+    modal.style.display = 'flex';
+}
+function closeQR() {
+    var modal = document.getElementById('qr-modal');
+    modal.style.display = 'none';
+    document.getElementById('qr-img').src = '';
+}
+document.getElementById('qr-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeQR();
+});
+</script>
 {% endblock %}
