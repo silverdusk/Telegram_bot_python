@@ -151,7 +151,7 @@ Reload nginx and ensure the app is listening on `0.0.0.0:8000` (default).
 
 ```bash
 # Install Python 3.10+, Poetry, PostgreSQL client libs
-poetry install --no-dev
+poetry install --without dev
 # Copy .env (or config.json) into app directory
 poetry run python run.py
 ```

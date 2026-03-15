@@ -143,6 +143,7 @@ asyncio.run(set_webhook())
 - `GET /admin/items` — Browse items (paginated)
 - `GET /admin/settings` — View bot settings
 - `POST /admin/settings` — Save bot settings
+- `GET /admin/vpn` — VPN client management (requires `VPN_API_URL` + `VPN_API_PASSWORD`)
 
 ## Key Improvements
 

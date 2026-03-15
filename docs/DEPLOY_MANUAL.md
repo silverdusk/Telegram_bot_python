@@ -253,7 +253,7 @@ Same as Option A, Step 2 (e.g. `/opt/telegram-bot`).
 
 ```bash
 cd /opt/telegram-bot
-poetry install --no-dev
+poetry install --without dev
 cp .env.example .env
 nano .env
 ```
