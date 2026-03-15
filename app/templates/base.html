@@ -32,14 +32,16 @@
 
     {% block content %}{% endblock %}
 </div>
-<img id="jesus-fly" src="/static/flying_img.png" alt="">
+{% if feature_jesus_fly %}
+<img id="welcome-fly" src="/static/flying_img.png" alt="">
 <script>
 (function () {
     if (new URLSearchParams(window.location.search).get('welcome') === '1') {
-        document.getElementById('jesus-fly').style.display = 'block';
+        document.getElementById('welcome-fly').style.display = 'block';
         window.history.replaceState({}, '', window.location.pathname);
     }
 }());
 </script>
+{% endif %}
 </body>
 </html>

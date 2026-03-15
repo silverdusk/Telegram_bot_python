@@ -117,6 +117,9 @@ class Settings(BaseSettings):
         description="JWT cookie secret for admin panel (WEB_ADMIN_JWT_SECRET; random per-restart if not set)",
     )
 
+    # Feature flags
+    feature_welcome_fly: bool = Field(default=True, description="Enable welcome-fly login animation (FEATURE_WELCOME_FLY)")
+
     # VPN server (amnezia-wg-easy)
     vpn_api_url: str = Field(default="", description="Base URL of wg-easy API, e.g. http://localhost:51821")
     vpn_api_password: str = Field(default="", description="wg-easy web UI password")

@@ -29,6 +29,7 @@ admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 _TEMPLATE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "templates"))
 templates = Jinja2Templates(directory=_TEMPLATE_DIR)
+templates.env.globals["feature_welcome_fly"] = get_settings().feature_welcome_fly
 
 _CONFIG_JSON_PATH = os.path.join(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),

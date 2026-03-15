@@ -213,12 +213,12 @@ textarea { resize: vertical; min-height: 80px; }
     margin-bottom: 16px;
 }
 
-/* ── Flying Jesus ── */
-@keyframes jesus-fly {
+/* ── Welcome Fly ── */
+@keyframes welcome-fly {
     from { transform: translate(0, 0) rotate(0deg); }
     to   { transform: translate(calc(100vw + 400px), calc(-100vh - 400px)) rotate(30deg); }
 }
-#jesus-fly {
+#welcome-fly {
     position: fixed;
     left: -200px;
     bottom: -200px;
@@ -226,7 +226,7 @@ textarea { resize: vertical; min-height: 80px; }
     pointer-events: none;
     z-index: 9999;
     display: none;
-    animation: jesus-fly 5.0s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    animation: welcome-fly 5.0s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
 /* ── Responsive ── */
